@@ -90,7 +90,7 @@ export class LiteLLMClient {
     try {
       const response = await fetch(`${this.baseUrl}/health`, {
         method: 'GET',
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(15000), // Increased from 5s to 15s
       });
 
       if (!response.ok) {

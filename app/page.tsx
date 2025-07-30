@@ -2,22 +2,14 @@
 
 import { SearchComponent } from './search'
 import { ChatInterface } from './chat-interface'
-import { SearchResult, Message } from './types'
+import { SearchResult } from './types'
 import { Button } from '@/components/ui/button'
-import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { toast } from "sonner"
-import { ErrorDisplay } from '@/components/error-display'
 import { useCrawlplexityChat } from './hooks/use-crawlplexity-chat'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { Sidebar } from '@/components/sidebar/Sidebar'
+import { useSidebar } from '@/contexts/SidebarContext'
+import { GeminiKeyWarning } from '@/components/ui/gemini-key-warning'
 
 interface MessageData {
   sources: SearchResult[]
@@ -30,24 +22,22 @@ export default function CrawlplexityPage() {
   const [hasSearched, setHasSearched] = useState(false)
   const [messageData, setMessageData] = useState<Map<number, MessageData>>(new Map())
   const currentMessageIndex = useRef(0)
-  const [firecrawlApiKey, setFirecrawlApiKey] = useState<string>('')
-  const [hasApiKey, setHasApiKey] = useState<boolean>(false)
-  const [showApiKeyModal, setShowApiKeyModal] = useState<boolean>(false)
-  const [, setIsCheckingEnv] = useState<boolean>(true)
-  const [pendingQuery, setPendingQuery] = useState<string>('')
   const [input, setInput] = useState('')
+  const [showGeminiWarning, setShowGeminiWarning] = useState(false)
+  
+  // Sidebar context
+  const { sidebarState } = useSidebar()
 
   // Use our custom Crawlplexity chat hook
   const {
     messages,
     append,
-    reload,
-    stop,
     isLoading,
     error,
     sources,
     followUpQuestions,
     ticker: currentTicker,
+    warnings,
   } = useCrawlplexityChat()
 
   // Debug logging
@@ -64,6 +54,16 @@ export default function CrawlplexityPage() {
       setSearchStatus('')
     }
   }, [isLoading, searchStatus])
+
+  // Handle Gemini API key warnings
+  useEffect(() => {
+    if (warnings && warnings.length > 0) {
+      const geminiWarning = warnings.find(w => w.type === 'gemini_key_missing')
+      if (geminiWarning && !showGeminiWarning) {
+        setShowGeminiWarning(true)
+      }
+    }
+  }, [warnings, showGeminiWarning])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setInput(e.target.value)
@@ -85,46 +85,10 @@ export default function CrawlplexityPage() {
     })
   }
 
-  // Crawlplexity is self-hosted and doesn't require API keys
-  useEffect(() => {
-    setHasApiKey(true)
-    setIsCheckingEnv(false)
-  }, [])
-
-  const handleApiKeySubmit = () => {
-    if (firecrawlApiKey.trim()) {
-      localStorage.setItem('firecrawl-api-key', firecrawlApiKey)
-      setHasApiKey(true)
-      setShowApiKeyModal(false)
-      toast.success('API key saved successfully!')
-      
-      // If there's a pending query, submit it
-      if (pendingQuery) {
-        const fakeEvent = {
-          preventDefault: () => {},
-          currentTarget: {
-            querySelector: () => ({ value: pendingQuery })
-          }
-        } as any
-        handleInputChange({ target: { value: pendingQuery } } as any)
-        setTimeout(() => {
-          handleSubmit(fakeEvent)
-          setPendingQuery('')
-        }, 100)
-      }
-    }
-  }
 
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!input.trim()) return
-    
-    // Check if we have an API key
-    if (!hasApiKey) {
-      setPendingQuery(input)
-      setShowApiKeyModal(true)
-      return
-    }
     
     setHasSearched(true)
     // Note: Our custom hook handles clearing data automatically
@@ -133,14 +97,6 @@ export default function CrawlplexityPage() {
   
   // Wrapped submit handler for chat interface
   const handleChatSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    // Check if we have an API key
-    if (!hasApiKey) {
-      setPendingQuery(input)
-      setShowApiKeyModal(true)
-      e.preventDefault()
-      return
-    }
-    
     // Store current data in messageData before clearing
     if (messages.length > 0 && sources.length > 0) {
       const assistantMessages = messages.filter(m => m.role === 'assistant')
@@ -163,19 +119,21 @@ export default function CrawlplexityPage() {
   const isChatActive = hasSearched || messages.length > 0
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <>
+      <Sidebar />
+      <div className={`min-h-screen flex flex-col transition-all duration-300 ${
+        sidebarState === 'collapsed' ? 'ml-0' : 
+        sidebarState === 'semi-collapsed' ? 'ml-16' : 'ml-80'
+      }`}>
       {/* Header with logo - matching other pages */}
       <header className="px-4 sm:px-6 lg:px-8 py-1 mt-2">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <Link
-            href="https://github.com/unclecode/crawl4ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-          >
-            <span className="text-2xl">🚀🤖</span>
-            <span>Crawl4AI</span>
-          </Link>
+          <div className="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white">
+            <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">C</span>
+            </div>
+            <span>Crawlplexity</span>
+          </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
             {isChatActive && (
@@ -210,12 +168,9 @@ export default function CrawlplexityPage() {
             <span className="relative px-1 pb-1 text-transparent bg-clip-text bg-gradient-to-tr from-red-600 to-yellow-500 inline-flex justify-center items-center">
               Crawlplexity
             </span>
-            <span className="block leading-[1.1] opacity-0 animate-fade-up [animation-duration:500ms] [animation-delay:400ms] [animation-fill-mode:forwards]">
-              Search & Scrape
-            </span>
           </h1>
           <p className="mt-3 text-lg text-zinc-600 dark:text-zinc-400 opacity-0 animate-fade-up [animation-duration:500ms] [animation-delay:600ms] [animation-fill-mode:forwards]">
-            Self-hosted AI search engine powered by Serper API and Crawl4AI
+            Fully open sourced engine
           </p>
         </div>
       </div>
@@ -272,35 +227,14 @@ export default function CrawlplexityPage() {
           </p>
         </div>
       </footer>
-      
-      {/* API Key Modal */}
-      <Dialog open={showApiKeyModal} onOpenChange={setShowApiKeyModal}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Service Configuration</DialogTitle>
-            <DialogDescription>
-              Crawlplexity is self-hosted and requires Docker services to be running. Please ensure your backend services are available.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <Input
-              placeholder="Enter your Firecrawl API key"
-              value={firecrawlApiKey}
-              onChange={(e) => setFirecrawlApiKey(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  handleApiKeySubmit()
-                }
-              }}
-              className="h-12"
-            />
-            <Button onClick={handleApiKeySubmit} variant="orange" className="w-full">
-              Save API Key
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+      </div>
+
+      {/* Gemini API Key Warning Modal */}
+      <GeminiKeyWarning
+        isOpen={showGeminiWarning}
+        onClose={() => setShowGeminiWarning(false)}
+        hasVideoResults={sources.some(s => s.url?.includes('youtube.com') || s.url?.includes('vimeo.com'))}
+      />
+    </>
   )
 }

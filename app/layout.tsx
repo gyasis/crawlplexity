@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from 'sonner'
 import { ThemeProvider } from "next-themes"
+import { SidebarProvider } from "@/contexts/SidebarContext"
 
 export const metadata: Metadata = {
   title: "Fireplexity - AI-Powered Search",
@@ -22,8 +23,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
-          <Toaster position="bottom-right" />
+          <SidebarProvider>
+            {children}
+            <Toaster position="bottom-right" />
+          </SidebarProvider>
         </ThemeProvider>
       </body>
     </html>

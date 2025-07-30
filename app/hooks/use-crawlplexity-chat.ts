@@ -8,7 +8,8 @@ export function useCrawlplexityChat() {
     sources: [],
     followUpQuestions: [],
     ticker: undefined,
-    error: undefined
+    error: undefined,
+    warnings: []
   })
   
   const eventSourceRef = useRef<EventSource | null>(null)
@@ -31,7 +32,8 @@ export function useCrawlplexityChat() {
       error: undefined,
       sources: [],
       followUpQuestions: [],
-      ticker: undefined
+      ticker: undefined,
+      warnings: []
     }))
 
     try {
@@ -143,6 +145,17 @@ export function useCrawlplexityChat() {
                   }))
                   break
                   
+                case 'warning':
+                  setState(prev => ({
+                    ...prev,
+                    warnings: [...(prev.warnings || []), {
+                      type: event.type || 'general',
+                      message: event.message || 'Warning occurred',
+                      details: event.details
+                    }]
+                  }))
+                  break
+                  
                 case 'error':
                   setState(prev => ({
                     ...prev,
@@ -249,5 +262,6 @@ export function useCrawlplexityChat() {
     sources: state.sources,
     followUpQuestions: state.followUpQuestions,
     ticker: state.ticker,
+    warnings: state.warnings,
   }
 }

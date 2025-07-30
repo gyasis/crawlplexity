@@ -191,8 +191,8 @@ export class SerperClient {
       }
 
       // Skip common non-content URLs
+      // NOTE: YouTube is now supported by video processing service
       const skipDomains = [
-        'youtube.com',
         'facebook.com',
         'twitter.com',
         'instagram.com',

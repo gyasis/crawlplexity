@@ -44,4 +44,5 @@ next-env.d.ts
 # lock files (if you want to exclude them)
 # package-lock.json
 # pnpm-lock.yaml
-# yarn.lock
+# yarn.lock__pycache__/
+*.pyc

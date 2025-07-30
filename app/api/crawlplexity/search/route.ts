@@ -63,8 +63,17 @@ export async function POST(request: NextRequest) {
           
           if (!searchHealthCheck.overall) {
             throw new Error(
-              `Search services not available - Crawl4AI: ${searchHealthCheck.crawl4ai ? 'OK' : 'DOWN'}, Serper: ${searchHealthCheck.serper ? 'OK' : 'DOWN'}`
+              `Search services not available - Crawl4AI: ${searchHealthCheck.crawl4ai ? 'OK' : 'DOWN'}, Serper: ${searchHealthCheck.serper ? 'OK' : 'DOWN'}, Video Processor: ${searchHealthCheck.videoProcessor ? 'OK' : 'DOWN'}`
             )
+          }
+          
+          // Check if video processor has Gemini key configured
+          if (searchHealthCheck.videoProcessor && !searchHealthCheck.geminiConfigured) {
+            sendEvent('warning', { 
+              type: 'gemini_key_missing',
+              message: 'Video and image processing requires Gemini API key',
+              details: 'YouTube videos and images in search results will have limited processing without GOOGLE_AI_API_KEY'
+            })
           }
           
           if (litellmHealthCheck.status !== 'healthy' || litellmHealthCheck.healthy_models.length === 0) {
@@ -89,27 +98,56 @@ export async function POST(request: NextRequest) {
             totalResults: searchResponse.totalResults,
             searchTime: searchResponse.searchTime,
             crawlTime: searchResponse.crawlTime,
-            successfulCrawls: searchResponse.results.filter(r => r.success).length
+            successfulCrawls: searchResponse.results.filter(r => r.success).length,
+            videoResults: searchResponse.results.filter(r => r.contentType === 'video').length,
+            successfulVideoResults: searchResponse.results.filter(r => r.contentType === 'video' && r.success).length
           })
+          
+          // Debug video results specifically
+          const videoResults = searchResponse.results.filter(r => r.contentType === 'video');
+          console.log(`[${requestId}] 🎬 Video results details:`);
+          videoResults.forEach((result, index) => {
+            console.log(`[${requestId}]   Video ${index + 1}: ${result.title}`);
+            console.log(`[${requestId}]     • URL: ${result.url}`);
+            console.log(`[${requestId}]     • Success: ${result.success}`);
+            console.log(`[${requestId}]     • Content length: ${result.content?.length || 0}`);
+            console.log(`[${requestId}]     • Has videoContent: ${!!result.videoContent}`);
+            console.log(`[${requestId}]     • Video processed content length: ${result.videoContent?.processedContent?.length || 0}`);
+            console.log(`[${requestId}]     • Error: ${result.error || 'none'}`);
+          });
 
           // Step 3: Transform results to match expected format
-          const sources = searchResponse.results.map(result => ({
-            url: result.url,
-            title: result.title,
-            description: result.description || result.searchSnippet,
-            content: result.content || '',
-            markdown: result.markdown || '',
-            publishedDate: result.publishedDate,
-            author: result.author,
-            image: result.image,
-            favicon: result.favicon,
-            siteName: result.siteName,
-            success: result.success,
-            searchRank: result.searchRank,
-          })).filter(source => 
-            // Keep sources with either successful crawl content or search snippet
-            (source.success && source.markdown) || source.description
-          )
+          console.log(`[${requestId}] 🔄 Transforming ${searchResponse.results.length} search results...`);
+          
+          const sources = searchResponse.results.map((result, index) => {
+            console.log(`[${requestId}] Transforming result ${index + 1}:`);
+            console.log(`[${requestId}]   • URL: ${result.url}`);
+            console.log(`[${requestId}]   • Type: ${result.contentType}`);
+            console.log(`[${requestId}]   • Success: ${result.success}`);
+            console.log(`[${requestId}]   • Content length: ${result.content?.length || 0}`);
+            console.log(`[${requestId}]   • Markdown length: ${result.markdown?.length || 0}`);
+            
+            return {
+              url: result.url,
+              title: result.title,
+              description: result.description || result.searchSnippet,
+              content: result.content || '',
+              markdown: result.markdown || '',
+              publishedDate: result.publishedDate,
+              author: result.author,
+              image: result.image,
+              favicon: result.favicon,
+              siteName: result.siteName,
+              success: result.success,
+              searchRank: result.searchRank,
+            };
+          }).filter((source, index) => {
+            const keep = (source.success && source.markdown) || source.description;
+            console.log(`[${requestId}] Source ${index + 1} keep: ${keep} (success: ${source.success}, hasMarkdown: ${!!source.markdown}, hasDescription: ${!!source.description})`);
+            return keep;
+          });
+          
+          console.log(`[${requestId}] ✅ Filtered to ${sources.length} sources`);
 
           // Send sources immediately
           sendEvent('sources', { sources })
@@ -125,22 +163,38 @@ export async function POST(request: NextRequest) {
           }
           
           // Step 6: Prepare context from sources with intelligent content selection
+          console.log(`[${requestId}] 📝 Preparing context from ${sources.length} sources...`);
+          
           const context = sources
             .map((source, index) => {
-              const content = source.markdown || source.content || ''
-              const relevantContent = selectRelevantContent(content, query, 2000)
-              const sourceInfo = `[${index + 1}] ${source.title}\nURL: ${source.url}`
+              const content = source.markdown || source.content || '';
+              const relevantContent = selectRelevantContent(content, query, 2000);
+              const sourceInfo = `[${index + 1}] ${source.title}\nURL: ${source.url}`;
               
               // Add success indicator for debugging
-              const successIndicator = source.success ? '' : ' (search snippet only)'
+              const successIndicator = source.success ? '' : ' (search snippet only)';
               
-              return `${sourceInfo}${successIndicator}\n${relevantContent}`
+              console.log(`[${requestId}] Source ${index + 1} context:`);
+              console.log(`[${requestId}]   • Original content length: ${content.length}`);
+              console.log(`[${requestId}]   • Relevant content length: ${relevantContent.length}`);
+              console.log(`[${requestId}]   • Success indicator: "${successIndicator}"`);
+              
+              return `${sourceInfo}${successIndicator}\n${relevantContent}`;
             })
-            .join('\n\n---\n\n')
+            .join('\n\n---\n\n');
+            
+          console.log(`[${requestId}] ✅ Final context length: ${context.length}`);
 
-          console.log(`[${requestId}] Creating text stream for query:`, query)
-          console.log(`[${requestId}] Context length:`, context.length)
-          console.log(`[${requestId}] Successful crawls: ${sources.filter(s => s.success).length}/${sources.length}`)
+          console.log(`[${requestId}] 💬 Creating text stream for query:`, query);
+          console.log(`[${requestId}] 📝 Context length:`, context.length);
+          console.log(`[${requestId}] ✅ Successful crawls: ${sources.filter(s => s.success).length}/${sources.length}`);
+          console.log(`[${requestId}] 🎬 Video sources in final context: ${sources.filter(s => s.url.includes('youtube.com') || s.url.includes('youtu.be')).length}`);
+          
+          // Log a preview of the context to see if video content is included
+          if (context.length > 0) {
+            const contextPreview = context.substring(0, 500) + (context.length > 500 ? '...' : '');
+            console.log(`[${requestId}] 👁️ Context preview:`, contextPreview);
+          }
           
           // Step 7: Prepare messages for the AI using LiteLLM
           let systemPrompt: string

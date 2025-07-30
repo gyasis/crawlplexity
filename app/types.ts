@@ -23,7 +23,7 @@ export interface SearchResult {
 }
 
 export interface StreamEvent {
-  type: 'status' | 'sources' | 'text' | 'ticker' | 'follow_up_questions' | 'metrics' | 'complete' | 'error'
+  type: 'status' | 'sources' | 'text' | 'ticker' | 'follow_up_questions' | 'metrics' | 'complete' | 'error' | 'warning'
   message?: string
   sources?: SearchResult[]
   content?: string
@@ -32,6 +32,7 @@ export interface StreamEvent {
   error?: string
   suggestion?: string
   technical_details?: string
+  details?: string
   [key: string]: any
 }
 
@@ -42,4 +43,9 @@ export interface ChatState {
   followUpQuestions: string[]
   ticker?: string
   error?: string
+  warnings?: Array<{
+    type: string
+    message: string
+    details?: string
+  }>
 }
