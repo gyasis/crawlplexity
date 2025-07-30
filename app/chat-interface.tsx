@@ -35,8 +35,16 @@ export function ChatInterface({ messages, sources, followUpQuestions, searchStat
   const formRef = useRef<HTMLFormElement>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   
-  // Simple theme detection based on document class
-  const theme = typeof window !== 'undefined' && document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+  // Simple theme detection based on document class - using state to avoid hydration mismatch
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  
+  useEffect(() => {
+    // Check theme after component mounts to avoid hydration mismatch
+    if (typeof window !== 'undefined') {
+      const isDark = document.documentElement.classList.contains('dark')
+      setTheme(isDark ? 'dark' : 'light')
+    }
+  }, [])
   
   // Extract the current query and check if we're waiting for response
   let query = ''
@@ -313,7 +321,7 @@ export function ChatInterface({ messages, sources, followUpQuestions, searchStat
                               </button>
                             </div>
                           </div>
-                          <div className="prose prose-gray max-w-none dark:prose-invert">
+                          <div className="prose prose-gray max-w-none dark:prose-invert prose-pre:bg-black prose-pre:text-green-400 dark:prose-pre:bg-black dark:prose-pre:text-green-400">
                             <MarkdownRenderer 
                               content={pair.assistant?.content || ''}
                               sources={messageSources}
@@ -535,7 +543,7 @@ export function ChatInterface({ messages, sources, followUpQuestions, searchStat
                 )}
               </div>
               <div>
-                <div className="prose prose-gray max-w-none dark:prose-invert prose-p:leading-relaxed prose-pre:bg-gray-100 dark:prose-pre:bg-zinc-900">
+                <div className="prose prose-gray max-w-none dark:prose-invert prose-p:leading-relaxed prose-pre:bg-black prose-pre:text-green-400 dark:prose-pre:bg-black dark:prose-pre:text-green-400">
                   <MarkdownRenderer 
                     content={messages[messages.length - 1].content || ''}
                     sources={sources}
