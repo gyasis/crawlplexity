@@ -36,6 +36,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# IDE and session files (contains sensitive data)
+.specstory/
+.claude/
+.cursor/
+
 # lock files (if you want to exclude them)
 # package-lock.json
 # pnpm-lock.yaml

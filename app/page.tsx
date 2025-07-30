@@ -1,12 +1,10 @@
 'use client'
 
-import { useChat } from 'ai/react'
 import { SearchComponent } from './search'
 import { ChatInterface } from './chat-interface'
-import { SearchResult } from './types'
+import { SearchResult, Message } from './types'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
-import Image from 'next/image'
 import { useState, useEffect, useRef } from 'react'
 import {
   Dialog,
@@ -18,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
 import { ErrorDisplay } from '@/components/error-display'
+import { useCrawlplexityChat } from './hooks/use-crawlplexity-chat'
 
 interface MessageData {
   sources: SearchResult[]
@@ -25,118 +24,63 @@ interface MessageData {
   ticker?: string
 }
 
-export default function FireplexityPage() {
-  const [sources, setSources] = useState<SearchResult[]>([])
-  const [followUpQuestions, setFollowUpQuestions] = useState<string[]>([])
+export default function CrawlplexityPage() {
   const [searchStatus, setSearchStatus] = useState('')
   const [hasSearched, setHasSearched] = useState(false)
-  const lastDataLength = useRef(0)
   const [messageData, setMessageData] = useState<Map<number, MessageData>>(new Map())
   const currentMessageIndex = useRef(0)
-  const [currentTicker, setCurrentTicker] = useState<string | null>(null)
   const [firecrawlApiKey, setFirecrawlApiKey] = useState<string>('')
   const [hasApiKey, setHasApiKey] = useState<boolean>(false)
   const [showApiKeyModal, setShowApiKeyModal] = useState<boolean>(false)
   const [, setIsCheckingEnv] = useState<boolean>(true)
   const [pendingQuery, setPendingQuery] = useState<string>('')
+  const [input, setInput] = useState('')
 
-  const { messages, input, handleInputChange, handleSubmit, isLoading, data } = useChat({
-    api: '/api/fireplexity/search',
-    body: {
-      ...(firecrawlApiKey && { firecrawlApiKey })
-    },
-    onResponse: () => {
-      // Clear status when response starts
-      setSearchStatus('')
-      // Clear current data for new response
-      setSources([])
-      setFollowUpQuestions([])
-      setCurrentTicker(null)
-      // Track the current message index (assistant messages only)
-      const assistantMessages = messages.filter(m => m.role === 'assistant')
-      currentMessageIndex.current = assistantMessages.length
-    },
-    onError: (error) => {
-      console.error('Chat error:', error)
-      setSearchStatus('')
-    },
-    onFinish: () => {
-      setSearchStatus('')
-      // Reset data length tracker
-      lastDataLength.current = 0
-    }
+  // Use our custom Crawlplexity chat hook
+  const {
+    messages,
+    append,
+    reload,
+    stop,
+    isLoading,
+    error,
+    sources,
+    followUpQuestions,
+    ticker: currentTicker,
+  } = useCrawlplexityChat()
+
+  // Debug logging
+  console.log('Crawlplexity Chat State:', { 
+    messagesCount: messages.length, 
+    sourcesCount: sources.length, 
+    isLoading, 
+    error 
   })
 
-  // Handle custom data from stream - only process new items
-  useEffect(() => {
-    if (data && Array.isArray(data)) {
-      // Only process new items that haven't been processed before
-      const newItems = data.slice(lastDataLength.current)
-      
-      newItems.forEach((item) => {
-        if (!item || typeof item !== 'object' || !('type' in item)) return
-        
-        const typedItem = item as unknown as { type: string; message?: string; sources?: SearchResult[]; questions?: string[]; symbol?: string }
-        if (typedItem.type === 'status') {
-          setSearchStatus(typedItem.message || '')
-        }
-        if (typedItem.type === 'ticker' && typedItem.symbol) {
-          setCurrentTicker(typedItem.symbol)
-          // Also store in message data map
-          const newMap = new Map(messageData)
-          const existingData = newMap.get(currentMessageIndex.current) || { sources: [], followUpQuestions: [] }
-          newMap.set(currentMessageIndex.current, { ...existingData, ticker: typedItem.symbol })
-          setMessageData(newMap)
-        }
-        if (typedItem.type === 'sources' && typedItem.sources) {
-          setSources(typedItem.sources)
-          // Also store in message data map
-          const newMap = new Map(messageData)
-          const existingData = newMap.get(currentMessageIndex.current) || { sources: [], followUpQuestions: [] }
-          newMap.set(currentMessageIndex.current, { ...existingData, sources: typedItem.sources })
-          setMessageData(newMap)
-        }
-        if (typedItem.type === 'follow_up_questions' && typedItem.questions) {
-          setFollowUpQuestions(typedItem.questions)
-          // Also store in message data map
-          const newMap = new Map(messageData)
-          const existingData = newMap.get(currentMessageIndex.current) || { sources: [], followUpQuestions: [] }
-          newMap.set(currentMessageIndex.current, { ...existingData, followUpQuestions: typedItem.questions })
-          setMessageData(newMap)
-        }
-      })
-      
-      // Update the last processed length
-      lastDataLength.current = data.length
-    }
-  }, [data, messageData])
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setInput(e.target.value)
+  }
 
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!input.trim() || isLoading) return
 
-  // Check for environment variables on mount
+    const query = input.trim()
+    setInput('')
+    setHasSearched(true)
+    setSearchStatus('Starting search...')
+
+    // Add user message and start streaming
+    await append({
+      role: 'user',
+      content: query
+    })
+  }
+
+  // Crawlplexity is self-hosted and doesn't require API keys
   useEffect(() => {
-    const checkApiKey = async () => {
-      try {
-        const response = await fetch('/api/fireplexity/check-env')
-        const data = await response.json()
-        
-        if (data.hasFirecrawlKey) {
-          setHasApiKey(true)
-        } else {
-          // Check localStorage for user's API key
-          const storedKey = localStorage.getItem('firecrawl-api-key')
-          if (storedKey) {
-            setFirecrawlApiKey(storedKey)
-            setHasApiKey(true)
-          }
-        }
-      } catch (error) {
-        console.error('Error checking environment:', error)
-      } finally {
-        setIsCheckingEnv(false)
-      }
-    }
-    
-    checkApiKey()
+    setHasApiKey(true)
+    setIsCheckingEnv(false)
   }, [])
 
   const handleApiKeySubmit = () => {
@@ -175,10 +119,7 @@ export default function FireplexityPage() {
     }
     
     setHasSearched(true)
-    // Clear current data immediately when submitting new query
-    setSources([])
-    setFollowUpQuestions([])
-    setCurrentTicker(null)
+    // Note: Our custom hook handles clearing data automatically
     handleSubmit(e)
   }
   
@@ -207,10 +148,7 @@ export default function FireplexityPage() {
       }
     }
     
-    // Clear current data immediately when submitting new query
-    setSources([])
-    setFollowUpQuestions([])
-    setCurrentTicker(null)
+    // Note: Our custom hook handles clearing data automatically
     handleSubmit(e)
   }
 
@@ -222,17 +160,13 @@ export default function FireplexityPage() {
       <header className="px-4 sm:px-6 lg:px-8 py-1 mt-2">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <Link
-            href="https://firecrawl.dev"
+            href="https://github.com/unclecode/crawl4ai"
             target="_blank"
             rel="noopener noreferrer"
+            className="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
           >
-            <Image 
-              src="/firecrawl-logo-with-fire.png" 
-              alt="Firecrawl Logo" 
-              width={113} 
-              height={24}
-              className="w-[113px] h-auto"
-            />
+            <span className="text-2xl">🚀🤖</span>
+            <span>Crawl4AI</span>
           </Link>
           <Button
             asChild
@@ -258,14 +192,14 @@ export default function FireplexityPage() {
         <div className="max-w-7xl mx-auto text-center">
           <h1 className="text-[2.5rem] lg:text-[3.8rem] text-[#36322F] dark:text-white font-semibold tracking-tight leading-[1.1] opacity-0 animate-fade-up [animation-duration:500ms] [animation-delay:200ms] [animation-fill-mode:forwards]">
             <span className="relative px-1 pb-1 text-transparent bg-clip-text bg-gradient-to-tr from-red-600 to-yellow-500 inline-flex justify-center items-center">
-              Fireplexity
+              Crawlplexity
             </span>
             <span className="block leading-[1.1] opacity-0 animate-fade-up [animation-duration:500ms] [animation-delay:400ms] [animation-fill-mode:forwards]">
               Search & Scrape
             </span>
           </h1>
           <p className="mt-3 text-lg text-zinc-600 dark:text-zinc-400 opacity-0 animate-fade-up [animation-duration:500ms] [animation-delay:600ms] [animation-fill-mode:forwards]">
-            AI-powered web search with instant results and follow-up questions
+            Self-hosted AI search engine powered by Serper API and Crawl4AI
           </p>
         </div>
       </div>
@@ -303,12 +237,21 @@ export default function FireplexityPage() {
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Powered by{' '}
             <a 
-              href="https://firecrawl.dev" 
+              href="https://serper.dev" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 font-medium"
+              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
             >
-              Firecrawl
+              Serper API
+            </a>
+            {' & '}
+            <a 
+              href="https://crawl4ai.com" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 font-medium"
+            >
+              Crawl4AI
             </a>
           </p>
         </div>
@@ -318,17 +261,9 @@ export default function FireplexityPage() {
       <Dialog open={showApiKeyModal} onOpenChange={setShowApiKeyModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Firecrawl API Key Required</DialogTitle>
+            <DialogTitle>Service Configuration</DialogTitle>
             <DialogDescription>
-              To use Fireplexity search, you need a Firecrawl API key. Get one for free at{' '}
-              <a 
-                href="https://www.firecrawl.dev" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-orange-600 hover:text-orange-700 underline"
-              >
-                firecrawl.dev
-              </a>
+              Crawlplexity is self-hosted and requires Docker services to be running. Please ensure your backend services are available.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">

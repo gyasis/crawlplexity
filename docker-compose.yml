@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  crawl4ai:
+    image: unclecode/crawl4ai:latest
+    container_name: crawlplexity-crawl4ai
+    ports:
+      - "11235:11235"
+    environment:
+      - SERPER_API_KEY=${SERPER_API_KEY}
+    shm_size: 1g
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11235/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - crawl4ai_cache:/app/cache
+    networks:
+      - crawlplexity
+
+  litellm:
+    build: ./litellm-service
+    container_name: crawlplexity-litellm
+    ports:
+      - "14782:14782"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      - LITELLM_PORT=14782
+      - LITELLM_HOST=0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:14782/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - crawlplexity
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    container_name: crawlplexity-redis
+    ports:
+      - "29674:6379"
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - crawlplexity
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  crawl4ai_cache:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  crawlplexity:
+    driver: bridge
