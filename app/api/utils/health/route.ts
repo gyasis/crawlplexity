@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       utilsStatus = {
         taskmaster: { initialized: false, error: dspyError },
         query_deconstruction: { initialized: false, error: dspyError },
-        pybridge: { connected: false, error: dspyError }
+        subprocess: { connected: false, error: dspyError }
       };
     }
 
@@ -51,10 +51,10 @@ export async function GET(request: NextRequest) {
             optimization_count: utilsStatus.query_deconstruction.optimization_count,
             backend: utilsStatus.query_deconstruction.backend
           },
-          pybridge: {
-            connected: utilsStatus.pybridge.connected,
-            python_version: utilsStatus.pybridge.python_version,
-            last_ping: utilsStatus.pybridge.last_ping
+          subprocess: {
+            connected: utilsStatus.subprocess?.connected || false,
+            python_version: utilsStatus.subprocess?.python_version || 'unknown',
+            last_ping: utilsStatus.subprocess?.last_ping || new Date().toISOString()
           },
           error: dspyError
         },

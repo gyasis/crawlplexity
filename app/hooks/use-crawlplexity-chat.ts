@@ -12,12 +12,14 @@ export function useCrawlplexityChat() {
     warnings: []
   })
   
+  const [deepResearchStatus, setDeepResearchStatus] = useState<string | null>(null)
+  
   const eventSourceRef = useRef<EventSource | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
   const generateId = () => Math.random().toString(36).substring(7)
 
-  const append = useCallback(async (message: Omit<Message, 'id'>) => {
+  const append = useCallback(async (message: Omit<Message, 'id'>, options?: { deepResearch?: boolean, researchType?: string }) => {
     const newMessage: Message = {
       ...message,
       id: generateId(),
@@ -43,11 +45,15 @@ export function useCrawlplexityChat() {
       // Prepare request body
       const requestBody = {
         messages: [...state.messages, newMessage],
-        query: message.content
+        query: message.content,
+        research_type: options?.researchType || 'comprehensive'
       }
 
+      // Choose endpoint based on Deep Research mode
+      const endpoint = options?.deepResearch ? '/api/deep-research/search' : '/api/crawlplexity/search'
+      
       // Make POST request to start streaming
-      const response = await fetch('/api/crawlplexity/search', {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -108,6 +114,11 @@ export function useCrawlplexityChat() {
               switch (event.type) {
                 case 'status':
                   console.log('Status:', event.message)
+                  // For Deep Research, show status messages as they are more detailed
+                  if (options?.deepResearch && event.message) {
+                    setDeepResearchStatus(event.message)
+                    console.log('🔬 Deep Research:', event.message)
+                  }
                   break
                   
                 case 'sources':
@@ -118,6 +129,7 @@ export function useCrawlplexityChat() {
                   break
                   
                 case 'text':
+                case 'content': // Deep Research uses 'content' event type
                   if (event.content) {
                     assistantMessage += event.content
                     setState(prev => ({
@@ -165,10 +177,12 @@ export function useCrawlplexityChat() {
                   break
                   
                 case 'complete':
+                case 'completed': // Deep Research uses 'completed' event type
                   setState(prev => ({
                     ...prev,
                     isLoading: false
                   }))
+                  setDeepResearchStatus(null) // Clear status when done
                   break
                   
                 default:
@@ -263,5 +277,7 @@ export function useCrawlplexityChat() {
     followUpQuestions: state.followUpQuestions,
     ticker: state.ticker,
     warnings: state.warnings,
+    // Deep Research status
+    deepResearchStatus,
   }
 }

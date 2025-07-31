@@ -10,6 +10,7 @@ import { CharacterCounter } from './character-counter'
 import Image from 'next/image'
 import { MarkdownRenderer } from './markdown-renderer'
 import { StockChart } from './stock-chart'
+import { DeepResearchStatus } from '@/components/ui/deep-research-status'
 
 interface MessageData {
   sources: SearchResult[]
@@ -28,9 +29,10 @@ interface ChatInterfaceProps {
   handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void
   messageData?: Map<number, MessageData>
   currentTicker?: string | null
+  deepResearchStatus?: string | null
 }
 
-export function ChatInterface({ messages, sources, followUpQuestions, searchStatus, isLoading, input, handleInputChange, handleSubmit, messageData, currentTicker }: ChatInterfaceProps) {
+export function ChatInterface({ messages, sources, followUpQuestions, searchStatus, isLoading, input, handleInputChange, handleSubmit, messageData, currentTicker, deepResearchStatus }: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
@@ -144,6 +146,12 @@ export function ChatInterface({ messages, sources, followUpQuestions, searchStat
         }}
       >
         <div className="max-w-4xl mx-auto space-y-6 pb-8">
+          {/* Deep Research Status */}
+          <DeepResearchStatus 
+            status={deepResearchStatus} 
+            isActive={isLoading && !!deepResearchStatus} 
+          />
+          
           {/* Previous conversations */}
           {messages.length > 2 && (
             <>
@@ -391,11 +399,11 @@ export function ChatInterface({ messages, sources, followUpQuestions, searchStat
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-yellow-500" />
-                  <h2 className="text-sm font-medium text-gray-600 dark:text-gray-400">Sources</h2>
+                  <h2 className="text-sm font-medium text-gray-600 dark:text-gray-400">Sources ({sources.length})</h2>
                 </div>
                 {sources.length > 5 && (
                   <div className="flex items-center gap-1">
-                    <span className="text-xs text-gray-500 dark:text-gray-400 mr-1">+{sources.length - 5} more</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 mr-1">Scroll to see all →</span>
                     <div className="flex -space-x-2">
                       {sources.slice(5, 10).map((result, index) => (
                         <div key={index} className="w-5 h-5 bg-white dark:bg-zinc-700 rounded-full flex items-center justify-center overflow-hidden border border-gray-200 dark:border-gray-600">
@@ -422,14 +430,16 @@ export function ChatInterface({ messages, sources, followUpQuestions, searchStat
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-5 gap-2">
-                {sources.slice(0, 5).map((result, index) => (
-                  <a
-                    key={index}
-                    href={result.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group relative overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-600 transition-all duration-200 hover:shadow-md opacity-0 animate-fade-up h-28"
+              {/* Horizontal scrolling sources container */}
+              <div className="overflow-x-auto pb-2">
+                <div className="flex gap-3 min-w-max">
+                  {sources.map((result, index) => (
+                    <a
+                      key={index}
+                      href={result.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group relative overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-600 transition-all duration-200 hover:shadow-md opacity-0 animate-fade-up h-28 w-48 flex-shrink-0"
                     style={{
                       animationDelay: `${300 + index * 30}ms`,
                       animationDuration: '400ms',
@@ -497,8 +507,9 @@ export function ChatInterface({ messages, sources, followUpQuestions, searchStat
                         />
                       </div>
                     </div>
-                  </a>
-                ))}
+                    </a>
+                  ))}
+                </div>
               </div>
             </div>
           )}

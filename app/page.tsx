@@ -10,6 +10,9 @@ import { ThemeToggle } from '@/components/theme-toggle'
 import { Sidebar } from '@/components/sidebar/Sidebar'
 import { useSidebar } from '@/contexts/SidebarContext'
 import { GeminiKeyWarning } from '@/components/ui/gemini-key-warning'
+import { DeepResearchFallback } from '@/components/ui/deep-research-fallback'
+import { useDeepResearch } from './hooks/use-deep-research'
+import { toast } from 'sonner'
 
 interface MessageData {
   sources: SearchResult[]
@@ -24,6 +27,10 @@ export default function CrawlplexityPage() {
   const currentMessageIndex = useRef(0)
   const [input, setInput] = useState('')
   const [showGeminiWarning, setShowGeminiWarning] = useState(false)
+  const [deepResearchEnabled, setDeepResearchEnabled] = useState(false)
+  const [showDeepResearchFallback, setShowDeepResearchFallback] = useState(false)
+  const [deepResearchError, setDeepResearchError] = useState<string>('')
+  const [deepResearchDetails, setDeepResearchDetails] = useState<string[]>([])
   
   // Sidebar context
   const { sidebarState } = useSidebar()
@@ -38,7 +45,23 @@ export default function CrawlplexityPage() {
     followUpQuestions,
     ticker: currentTicker,
     warnings,
+    deepResearchStatus,
   } = useCrawlplexityChat()
+
+  // Deep Research hook
+  const {
+    isResearching,
+    researchProgress,
+    currentSessionId,
+    researchSessions,
+    error: researchError,
+    streamEvents,
+    startResearch,
+    getResearchStatus,
+    getResearchResults,
+    listResearchSessions,
+    cancelResearch
+  } = useDeepResearch()
 
   // Debug logging
   console.log('Crawlplexity Chat State:', { 
@@ -65,24 +88,127 @@ export default function CrawlplexityPage() {
     }
   }, [warnings, showGeminiWarning])
 
+  // Handle Deep Research status updates
+  useEffect(() => {
+    if (deepResearchStatus) {
+      // Show status updates as toasts
+      toast.info(`🔬 ${deepResearchStatus}`, {
+        duration: 3000,
+        id: 'deep-research-status' // Use consistent ID to replace previous status
+      })
+    }
+  }, [deepResearchStatus])
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setInput(e.target.value)
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!input.trim() || isLoading) return
+    if (!input.trim() || isLoading || isResearching) return
 
     const query = input.trim()
     setInput('')
     setHasSearched(true)
-    setSearchStatus('Starting search...')
 
-    // Add user message and start streaming
+    // Check for slash commands
+    if (query.startsWith('/')) {
+      await handleSlashCommand(query)
+      return
+    }
+
+    // Check if deep research is enabled
+    if (deepResearchEnabled) {
+      setSearchStatus('Starting deep research...')
+      toast.info('🔬 Starting Deep Research - enhanced multi-phase analysis')
+      
+      try {
+        // Use the enhanced Deep Research that outputs like regular search
+        await append({
+          role: 'user',
+          content: query
+        }, { 
+          deepResearch: true, 
+          researchType: 'comprehensive' 
+        })
+        return
+      } catch (error) {
+        // Handle Deep Research failure - fall back to regular search
+        console.error('Deep Research failed:', error)
+        
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        setDeepResearchError(errorMessage)
+        
+        // Extract setup instructions if available
+        if (errorMessage.includes('Setup required:')) {
+          const instructions = errorMessage.split('Setup required:')[1]?.split('\n').filter(line => line.trim())
+          setDeepResearchDetails(instructions || [])
+        }
+        
+        setShowDeepResearchFallback(true)
+        toast.error('Deep Research unavailable - falling back to regular search')
+        
+        // Continue with regular search
+        setDeepResearchEnabled(false)
+      }
+    }
+
+    // Regular search
+    setSearchStatus('Starting search...')
     await append({
       role: 'user',
       content: query
     })
+  }
+
+  // Handle slash commands
+  const handleSlashCommand = async (command: string) => {
+    const parts = command.split(' ')
+    const cmd = parts[0].toLowerCase()
+    const args = parts.slice(1).join(' ')
+
+    switch (cmd) {
+      case '/research':
+        if (!args.trim()) {
+          toast.error('Usage: /research [your question]')
+          return
+        }
+        toast.info('🔬 Starting comprehensive Deep Research...')
+        await append({
+          role: 'user',
+          content: args
+        }, { deepResearch: true, researchType: 'comprehensive' })
+        break
+
+      case '/research-quick':
+        if (!args.trim()) {
+          toast.error('Usage: /research-quick [your question]')
+          return
+        }
+        toast.info('⚡ Starting quick foundation research...')
+        await append({
+          role: 'user',
+          content: args
+        }, { deepResearch: true, researchType: 'foundation' })
+        break
+
+      case '/research-trends':
+        if (!args.trim()) {
+          toast.error('Usage: /research-trends [your topic]')
+          return
+        }
+        toast.info('📈 Starting trend analysis...')
+        await append({
+          role: 'user',
+          content: args
+        }, { deepResearch: true, researchType: 'trend' })
+        break
+
+
+      default:
+        toast.error(`Unknown command: ${cmd}\n\nAvailable commands:\n/research, /research-quick, /research-trends`)
+        break
+    }
   }
 
 
@@ -126,15 +252,15 @@ export default function CrawlplexityPage() {
         sidebarState === 'semi-collapsed' ? 'ml-16' : 'ml-80'
       }`}>
       {/* Header with logo - matching other pages */}
-      <header className="px-4 sm:px-6 lg:px-8 py-1 mt-2">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white">
+      <header className="px-4 sm:px-6 lg:px-8 py-2 min-h-[56px]">
+        <div className="max-w-4xl mx-auto flex items-center justify-between flex-wrap min-w-0">
+          <div className="flex items-center gap-2 sm:gap-4 text-lg font-bold text-gray-900 dark:text-white min-w-0">
             <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">C</span>
             </div>
-            <span>Crawlplexity</span>
+            <span className="truncate">Crawlplexity</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:gap-4">
             <ThemeToggle />
             {isChatActive && (
               <Button
@@ -147,14 +273,16 @@ export default function CrawlplexityPage() {
                 }}
                 variant="code"
                 className="font-medium flex items-center gap-2"
+                aria-label="New Search"
+                title="New Search"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 sm:w-5 sm:h-5">
                   <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
                   <path d="M21 3v5h-5"/>
                   <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
                   <path d="M3 21v-5h5"/>
                 </svg>
-                New Search
+                <span className="hidden sm:inline">New Search</span>
               </Button>
             )}
           </div>
@@ -183,7 +311,9 @@ export default function CrawlplexityPage() {
               handleSubmit={handleSearch}
               input={input}
               handleInputChange={handleInputChange}
-              isLoading={isLoading}
+              isLoading={isLoading || isResearching}
+              onDeepResearchToggle={setDeepResearchEnabled}
+              deepResearchEnabled={deepResearchEnabled}
             />
           ) : (
             <ChatInterface 
@@ -197,6 +327,7 @@ export default function CrawlplexityPage() {
               handleSubmit={handleChatSubmit}
               messageData={messageData}
               currentTicker={currentTicker}
+              deepResearchStatus={deepResearchStatus}
             />
           )}
         </div>
@@ -234,6 +365,20 @@ export default function CrawlplexityPage() {
         isOpen={showGeminiWarning}
         onClose={() => setShowGeminiWarning(false)}
         hasVideoResults={sources.some(s => s.url?.includes('youtube.com') || s.url?.includes('vimeo.com'))}
+      />
+
+      {/* Deep Research Fallback Modal */}
+      <DeepResearchFallback
+        isOpen={showDeepResearchFallback}
+        onClose={() => setShowDeepResearchFallback(false)}
+        onRetry={async () => {
+          // Try to re-enable deep research
+          setDeepResearchEnabled(true)
+          setShowDeepResearchFallback(false)
+          toast.info('Deep Research re-enabled - try your search again')
+        }}
+        error={deepResearchError}
+        details={deepResearchDetails}
       />
     </>
   )

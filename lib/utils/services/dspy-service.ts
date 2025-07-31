@@ -2,9 +2,13 @@
  * DSPy Service - PyBridge integration for Taskmaster and Query Deconstruction
  */
 
-import { PyBridge } from 'pybridge';
+// Using direct Python subprocess instead of PyBridge/JSPyBridge due to Next.js/Turbopack compatibility issues
+import { spawn, ChildProcess } from 'child_process';
 import * as msgpack from '@msgpack/msgpack';
 import { getCacheManager } from '@/lib/cache-manager';
+import { createClient } from 'redis';
+import path from 'path';
+import { promisify } from 'util';
 import {
   TaskBreakdown,
   TaskOptions,
@@ -34,56 +38,68 @@ interface QueryDeconstructionModule {
 }
 
 export class DSPyService {
-  private pyBridge: PyBridge | null = null;
-  private taskmasterController: any = null;
-  private queryDeconController: any = null;
+  private pythonProcess: ChildProcess | null = null;
+  private isProcessReady = false;
   private initialized = false;
   private initializationPromise: Promise<void> | null = null;
   private cacheManager = getCacheManager();
+  private redis = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+  private messageQueue: Map<string, { resolve: Function; reject: Function }> = new Map();
 
   constructor(private config?: Partial<PyBridgeConfig>) {
+    this.redis.connect().catch(console.error);
     this.initializationPromise = this.initialize();
   }
 
   /**
-   * Initialize PyBridge and Python modules
+   * Initialize Python subprocess and modules
    */
   private async initialize(): Promise<void> {
     try {
-      // Create PyBridge instance
-      this.pyBridge = new PyBridge({
-        pythonPath: this.config?.pythonPath || 'python3',
-        modules: ['msgpack', 'dspy', 'litellm', 'numpy', 'pydantic'],
-        cwd: this.config?.cwd || process.cwd(),
-        env: {
-          ...process.env,
-          ...this.config?.env,
-          PYTHONPATH: `${process.cwd()}/python:${process.env.PYTHONPATH || ''}`
-        }
+      // Get project root and construct paths
+      const projectRoot = process.cwd();
+      const pythonDir = path.resolve(projectRoot, 'python');
+      const pythonPath = this.config?.pythonPath || '/home/gyasis/miniconda3/envs/deeplake/bin/python3';
+      const bridgeScript = path.resolve(projectRoot, 'python/utils/dspy_bridge_simple.py');
+      
+      // Set PYTHONPATH to include our python directory
+      const env = {
+        ...process.env,
+        PYTHONPATH: `${pythonDir}:${process.env.PYTHONPATH || ''}`,
+        ...this.config?.env
+      };
+
+      console.log(`🐍 Starting Python DSPy subprocess:`);
+      console.log(`  - Python: ${pythonPath}`);
+      console.log(`  - Bridge: ${bridgeScript}`);
+      console.log(`  - Working Dir: ${projectRoot}`);
+
+      // Spawn Python process
+      this.pythonProcess = spawn(pythonPath, [bridgeScript], {
+        cwd: projectRoot,
+        env,
+        stdio: ['pipe', 'pipe', 'pipe']
       });
 
-      // Load Python modules
-      this.taskmasterController = this.pyBridge.controller<TaskmasterModule>(
-        'python/utils/taskmaster_module.py'
-      );
-      this.queryDeconController = this.pyBridge.controller<QueryDeconstructionModule>(
-        'python/utils/query_decon_module.py'
-      );
+      // Set up message handling
+      this.setupMessageHandling();
 
-      // Initialize both modules
-      await Promise.all([
-        this.taskmasterController.initialize(),
-        this.queryDeconController.initialize()
-      ]);
+      // Wait for process to be ready
+      await this.waitForReady();
+
+      // Test simple command first
+      const testResult = await this.sendCommand('test', {});
+      console.log('✅ Subprocess communication test successful:', testResult);
 
       this.initialized = true;
-      console.log('DSPy Service initialized successfully');
+      console.log('✅ DSPy Service initialized successfully with subprocess');
     } catch (error) {
-      console.error('Failed to initialize DSPy Service:', error);
+      console.error('❌ Failed to initialize DSPy Service:', error);
+      this.cleanup();
       throw new UtilsError(
         'Failed to initialize DSPy Service',
         'INIT_ERROR',
-        'pybridge',
+        'subprocess',
         error
       );
     }
@@ -100,10 +116,133 @@ export class DSPyService {
         throw new UtilsError(
           'DSPy Service not initialized',
           'NOT_INITIALIZED',
-          'pybridge'
+          'subprocess'
         );
       }
     }
+  }
+
+  /**
+   * Set up message handling for Python subprocess
+   */
+  private setupMessageHandling(): void {
+    if (!this.pythonProcess) return;
+
+    let buffer = '';
+
+    this.pythonProcess.stdout?.on('data', (data: Buffer) => {
+      buffer += data.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.trim()) {
+          try {
+            const message = JSON.parse(line);
+            this.handleMessage(message);
+          } catch (error) {
+            console.log('Python output:', line);
+          }
+        }
+      }
+    });
+
+    this.pythonProcess.stderr?.on('data', (data: Buffer) => {
+      console.error('Python stderr:', data.toString());
+    });
+
+    this.pythonProcess.on('close', (code) => {
+      console.log(`Python process exited with code ${code}`);
+      this.isProcessReady = false;
+      this.initialized = false;
+    });
+
+    this.pythonProcess.on('error', (error) => {
+      console.error('Python process error:', error);
+      this.isProcessReady = false;
+      this.initialized = false;
+    });
+  }
+
+  /**
+   * Handle messages from Python subprocess
+   */
+  private handleMessage(message: any): void {
+    if (message.type === 'ready') {
+      this.isProcessReady = true;
+      return;
+    }
+
+    if (message.id && this.messageQueue.has(message.id)) {
+      const { resolve, reject } = this.messageQueue.get(message.id)!;
+      this.messageQueue.delete(message.id);
+
+      if (message.error) {
+        reject(new Error(message.error));
+      } else {
+        resolve(message.result);
+      }
+    }
+  }
+
+  /**
+   * Wait for Python process to be ready
+   */
+  private async waitForReady(timeout: number = 10000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const startTime = Date.now();
+      
+      const checkReady = () => {
+        if (this.isProcessReady) {
+          resolve();
+        } else if (Date.now() - startTime > timeout) {
+          reject(new Error('Python process startup timeout'));
+        } else {
+          setTimeout(checkReady, 100);
+        }
+      };
+      
+      checkReady();
+    });
+  }
+
+  /**
+   * Send command to Python subprocess
+   */
+  private async sendCommand(command: string, params: any): Promise<any> {
+    if (!this.pythonProcess || !this.isProcessReady) {
+      throw new Error('Python process not ready');
+    }
+
+    const id = Math.random().toString(36).substring(2, 15);
+    const message = { id, command, params };
+
+    return new Promise((resolve, reject) => {
+      this.messageQueue.set(id, { resolve, reject });
+      
+      this.pythonProcess!.stdin?.write(JSON.stringify(message) + '\n');
+      
+      // Set timeout for command
+      setTimeout(() => {
+        if (this.messageQueue.has(id)) {
+          this.messageQueue.delete(id);
+          reject(new Error(`Command timeout: ${command}`));
+        }
+      }, 30000);
+    });
+  }
+
+  /**
+   * Cleanup subprocess
+   */
+  private cleanup(): void {
+    if (this.pythonProcess) {
+      this.pythonProcess.kill();
+      this.pythonProcess = null;
+    }
+    this.isProcessReady = false;
+    this.initialized = false;
+    this.messageQueue.clear();
   }
 
   /**
@@ -127,15 +266,15 @@ export class DSPyService {
         return cached;
       }
 
-      // Call Python module
-      const result = await this.taskmasterController.breakdown_task(
+      // Call Python subprocess
+      const result = await this.sendCommand('breakdown_task', {
         task,
         task_type,
         max_steps
-      );
+      });
 
-      // Decode msgpack result
-      const decoded = msgpack.decode(result) as TaskBreakdown;
+      // Result is already decoded by the Python bridge
+      const decoded = result as TaskBreakdown;
 
       // Validate result
       if (!decoded.task_id || !decoded.breakdown) {
@@ -182,15 +321,15 @@ export class DSPyService {
         return cached;
       }
 
-      // Call Python module
-      const result = await this.queryDeconController.deconstruct_query(
+      // Call Python subprocess
+      const result = await this.sendCommand('deconstruct_query', {
         query,
         query_type,
         max_queries
-      );
+      });
 
-      // Decode msgpack result
-      const decoded = msgpack.decode(result) as QueryDeconstruction;
+      // Result is already decoded by the Python bridge
+      const decoded = result as QueryDeconstruction;
 
       // Validate result
       if (!decoded.query_id || !decoded.deconstruction) {
@@ -227,11 +366,10 @@ export class DSPyService {
     await this.ensureInitialized();
 
     try {
-      const controller = feedback.module === 'taskmaster' 
-        ? this.taskmasterController 
-        : this.queryDeconController;
-
-      const result = await controller.optimize_module(feedback);
+      const result = await this.sendCommand('optimize_module', {
+        module_name: feedback.module,
+        feedback
+      });
 
       // Log optimization
       await this.logOptimization(feedback.module, result);
@@ -255,16 +393,13 @@ export class DSPyService {
     await this.ensureInitialized();
 
     try {
-      const [taskmasterStatus, queryDeconStatus] = await Promise.all([
-        this.taskmasterController.get_status(),
-        this.queryDeconController.get_status()
-      ]);
+      const status = await this.sendCommand('get_status', {});
 
       return {
-        taskmaster: taskmasterStatus,
-        query_deconstruction: queryDeconStatus,
-        pybridge: {
-          connected: this.pyBridge !== null,
+        taskmaster: status.taskmaster,
+        query_deconstruction: status.query_deconstruction,
+        subprocess: {
+          connected: this.pythonProcess !== null && this.isProcessReady,
           python_version: process.env.PYTHON_VERSION || '3.x',
           last_ping: new Date().toISOString()
         }
@@ -274,20 +409,25 @@ export class DSPyService {
       throw new UtilsError(
         'Failed to get module status',
         'STATUS_ERROR',
-        'pybridge',
+        'subprocess',
         error
       );
     }
   }
 
   /**
-   * Close PyBridge connection
+   * Close Python subprocess
    */
   async close(): Promise<void> {
-    if (this.pyBridge) {
-      this.pyBridge.close();
-      this.pyBridge = null;
-      this.initialized = false;
+    if (this.pythonProcess) {
+      try {
+        // Try graceful shutdown first
+        await this.sendCommand('shutdown', {});
+        setTimeout(() => this.cleanup(), 1000);
+      } catch (error) {
+        // Force cleanup if graceful shutdown fails
+        this.cleanup();
+      }
     }
   }
 
@@ -302,9 +442,11 @@ export class DSPyService {
         complexity: result.breakdown?.complexity_score || result.deconstruction?.complexity_reduction || 0
       };
       
-      // Store in Redis for analytics
-      await redis.lpush('utils:usage', JSON.stringify(usage));
-      await redis.ltrim('utils:usage', 0, 999); // Keep last 1000 entries
+      // Store in Redis for analytics (if connected)
+      if (this.redis && this.redis.isReady) {
+        await this.redis.lpush('utils:usage', JSON.stringify(usage));
+        await this.redis.ltrim('utils:usage', 0, 999); // Keep last 1000 entries
+      }
     } catch (error) {
       console.warn('Usage logging failed:', error);
     }
@@ -319,8 +461,10 @@ export class DSPyService {
         improvement: result.metrics.after.accuracy - result.metrics.before.accuracy
       };
       
-      await redis.lpush('utils:optimizations', JSON.stringify(optimization));
-      await redis.ltrim('utils:optimizations', 0, 99); // Keep last 100 optimizations
+      if (this.redis && this.redis.isReady) {
+        await this.redis.lpush('utils:optimizations', JSON.stringify(optimization));
+        await this.redis.ltrim('utils:optimizations', 0, 99); // Keep last 100 optimizations
+      }
     } catch (error) {
       console.warn('Optimization logging failed:', error);
     }

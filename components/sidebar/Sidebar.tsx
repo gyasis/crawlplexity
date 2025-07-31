@@ -40,7 +40,8 @@ export function Sidebar() {
         fixed left-0 top-0 h-full bg-white dark:bg-zinc-900 border-r border-gray-200 dark:border-gray-700 
         transition-all duration-300 ease-in-out z-40
         ${isCollapsed ? 'w-0 -translate-x-full' : 
-          isSemiCollapsed ? 'w-16' : 'w-80'}
+          isSemiCollapsed ? 'w-12 sm:w-16' : 'w-56 sm:w-80'}
+        max-w-full
       `}>
         {/* Header */}
         <div className="border-b border-gray-200 dark:border-gray-700">
@@ -165,10 +166,11 @@ export function Sidebar() {
       {isCollapsed && (
         <button
           onClick={toggleSidebar}
-          className="fixed left-4 top-4 z-50 p-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
+          className="fixed left-2 sm:left-4 top-16 sm:top-4 z-50 p-3 sm:p-2 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200"
           title="Open sidebar"
+          aria-label="Open sidebar"
         >
-          <ChevronRight className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+          <ChevronRight className="w-5 h-5 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-400" />
         </button>
       )}
       
@@ -176,7 +178,8 @@ export function Sidebar() {
       <div className={`
         transition-all duration-300 ease-in-out
         ${isCollapsed ? 'ml-0' : 
-          isSemiCollapsed ? 'ml-16' : 'ml-80'}
+          isSemiCollapsed ? 'ml-12 sm:ml-16' : 'ml-56 sm:ml-80'}
+        max-w-full
       `} />
     </>
   )
