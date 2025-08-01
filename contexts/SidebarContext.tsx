@@ -1,6 +1,8 @@
 'use client'
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { ModelStorage } from '@/lib/model-storage'
+import { CustomModel, RemoteServer } from '@/app/types'
 
 // Types
 export type SidebarState = 'expanded' | 'semi-collapsed' | 'collapsed'
@@ -35,6 +37,13 @@ export interface SidebarContextType {
   setSelectedModel: (model: string) => void
   loadModels: () => Promise<void>
   modelsLoading: boolean
+  
+  // Custom Models & Remote Servers
+  customModels: CustomModel[]
+  remoteServers: RemoteServer[]
+  loadCustomModels: () => Promise<void>
+  loadRemoteServers: () => Promise<void>
+  refreshAllModels: () => Promise<void>
   
   // Parameters
   parameters: LLMParameters
@@ -75,6 +84,10 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
   const [selectedModel, setSelectedModel] = useState<string | null>(null)
   const [modelsLoading, setModelsLoading] = useState(false)
   
+  // Custom Models & Remote Servers
+  const [customModels, setCustomModels] = useState<CustomModel[]>([])
+  const [remoteServers, setRemoteServers] = useState<RemoteServer[]>([])
+  
   // Parameters
   const [parameters, setParameters] = useState<LLMParameters>(DEFAULT_PARAMETERS)
   
@@ -101,6 +114,108 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
       }
     } catch (error) {
       console.error('Error loading models:', error)
+    } finally {
+      setModelsLoading(false)
+    }
+  }
+
+  // Load custom models from storage
+  const loadCustomModels = async () => {
+    try {
+      const models = await ModelStorage.getCustomModels()
+      setCustomModels(models)
+    } catch (error) {
+      console.error('Error loading custom models:', error)
+    }
+  }
+
+  // Load remote servers from storage
+  const loadRemoteServers = async () => {
+    try {
+      const servers = await ModelStorage.getRemoteServers()
+      setRemoteServers(servers)
+    } catch (error) {
+      console.error('Error loading remote servers:', error)
+    }
+  }
+
+  // Refresh all models including custom and remote
+  const refreshAllModels = async () => {
+    setModelsLoading(true)
+    try {
+      // Load standard models from API first
+      const response = await fetch('/api/models')
+      let baseModels: ModelInfo[] = []
+      
+      if (response.ok) {
+        const data = await response.json()
+        baseModels = (data.available_models || []).map((model: any) => ({
+          ...model,
+          category: 'local' as const
+        }))
+      }
+      
+      // Load custom models and remote servers from storage
+      const [freshCustomModels, freshRemoteServers] = await Promise.all([
+        ModelStorage.getCustomModels(),
+        ModelStorage.getRemoteServers()
+      ])
+      
+      // Update state
+      setCustomModels(freshCustomModels)
+      setRemoteServers(freshRemoteServers)
+      
+      // Convert custom models to ModelInfo format
+      const customModelInfos: ModelInfo[] = freshCustomModels.map(model => ({
+        id: `custom_${model.id}`,
+        name: model.name,
+        provider: model.provider,
+        available: true,
+        priority: 999, // Lower priority for custom models
+        cost_per_1k_tokens: model.costPer1kTokens || 0,
+        task_types: model.taskTypes || ['general'],
+        max_tokens: model.maxTokens || 2048,
+        category: 'custom' as const,
+        isCustom: true
+      }))
+
+      // Add remote server models
+      const remoteModelInfos: ModelInfo[] = []
+      for (const server of freshRemoteServers) {
+        if (server.discoveredModels && server.healthStatus === 'healthy') {
+          const serverModels = server.discoveredModels.map(modelName => ({
+            id: `remote_${server.id}_${modelName}`,
+            name: `${modelName} (${server.name})`,
+            provider: server.type === 'ollama' ? 'ollama' : server.type,
+            available: true,
+            priority: 900, // Medium priority for remote models
+            cost_per_1k_tokens: 0, // Assume free for remote servers
+            task_types: ['general'],
+            max_tokens: 2048,
+            category: 'remote' as const,
+            remoteServerId: server.id
+          }))
+          remoteModelInfos.push(...serverModels)
+        }
+      }
+
+      // Combine all models
+      const allModels = [
+        ...baseModels,
+        ...customModelInfos,
+        ...remoteModelInfos
+      ]
+      
+      setAvailableModels(allModels)
+      
+      // Set default model if none selected
+      if (!selectedModel && allModels.length > 0) {
+        const defaultModel = allModels.find(m => m.priority === 1) || allModels[0]
+        setSelectedModel(defaultModel.id)
+      }
+      
+    } catch (error) {
+      console.error('Error refreshing all models:', error)
     } finally {
       setModelsLoading(false)
     }
@@ -138,7 +253,7 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
   
   // Load models on mount
   useEffect(() => {
-    loadModels()
+    refreshAllModels()
   }, [])
   
   // Persist sidebar state to localStorage
@@ -176,6 +291,11 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
     setSelectedModel,
     loadModels,
     modelsLoading,
+    customModels,
+    remoteServers,
+    loadCustomModels,
+    loadRemoteServers,
+    refreshAllModels,
     parameters,
     updateParameter,
     resetParameters,

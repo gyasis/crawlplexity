@@ -1,7 +1,10 @@
 import { useState, useCallback, useRef } from 'react'
 import { Message, SearchResult, StreamEvent, ChatState } from '../types'
+import { useSidebar } from '@/contexts/SidebarContext'
 
 export function useCrawlplexityChat() {
+  const { availableModels, selectedModel, parameters, debugMode, addDebugLog } = useSidebar()
+  
   const [state, setState] = useState<ChatState>({
     messages: [],
     isLoading: false,
@@ -42,12 +45,23 @@ export function useCrawlplexityChat() {
       // Create abort controller for this request
       abortControllerRef.current = new AbortController()
 
+      // Get selected model info
+      const selectedModelInfo = availableModels.find(m => m.id === selectedModel)
+      
       // Prepare request body
       const requestBody = {
         messages: [...state.messages, newMessage],
         query: message.content,
-        research_type: options?.researchType || 'comprehensive'
+        research_type: options?.researchType || 'comprehensive',
+        model: selectedModelInfo?.id || 'gpt-4o-mini',
+        modelInfo: selectedModelInfo, // Include full model info for API
+        parameters: parameters, // Pass user-selected parameters
+        debugMode: debugMode // Pass debug mode state
       }
+      
+      // DEBUG: Log debug mode from context and request body
+      console.log('🐛 debugMode from useSidebar():', debugMode, typeof debugMode)
+      console.log('🚀 FRONTEND REQUEST BODY:', JSON.stringify(requestBody, null, 2))
 
       // Choose endpoint based on Deep Research mode
       const endpoint = options?.deepResearch ? '/api/deep-research/search' : '/api/crawlplexity/search'
@@ -109,6 +123,9 @@ export function useCrawlplexityChat() {
               if (jsonStr === '[DONE]') continue
               
               const event: StreamEvent = JSON.parse(jsonStr)
+              
+              // DEBUG: Log ALL events to see what's being received
+              console.log('🌟 ALL SSE EVENTS:', event.type, event)
               
               // Handle different event types
               switch (event.type) {
@@ -184,6 +201,22 @@ export function useCrawlplexityChat() {
                   }))
                   setDeepResearchStatus(null) // Clear status when done
                   break
+                
+                case 'debug_event':
+                  // Add individual debug event to sidebar context
+                  console.log('🔥 DEBUG EVENT HANDLER REACHED!', event)
+                  console.log('🐛 Frontend received debug event:', event.data?.type || event.type || 'unknown', event.data?.model || event.model || 'no-model')
+                  // The debug event properties are directly on the event object, not nested in event.data
+                  const debugLogEntry = {
+                    type: event.data?.type || event.debugType || 'debug',
+                    message: event.data?.message || event.message || `${event.data?.type || event.debugType || 'debug'}: ${event.data?.model || event.model || 'unknown'}`,
+                    data: event.data || event, // Use event.data if it exists, otherwise use the whole event
+                    timestamp: event.timestamp || new Date().toISOString(),
+                    id: event.id || Math.random().toString(36).substr(2, 9)
+                  }
+                  addDebugLog(debugLogEntry)
+                  console.log('🐛 Added debug log entry:', debugLogEntry)
+                  break
                   
                 default:
                   console.log('Unknown event type:', event.type)
@@ -213,7 +246,7 @@ export function useCrawlplexityChat() {
         error: error instanceof Error ? error.message : 'Unknown error occurred'
       }))
     }
-  }, [state.messages])
+  }, [state.messages, debugMode, availableModels, selectedModel, parameters])
 
   const stop = useCallback(() => {
     if (abortControllerRef.current) {

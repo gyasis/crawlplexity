@@ -5,15 +5,74 @@ import { getSearchOrchestrator } from '@/lib/search-orchestrator'
 import { getLiteLLMClient, createMessages } from '@/lib/litellm-client'
 import { getCacheManager } from '@/lib/cache-manager'
 
+// Helper function to validate and apply parameters based on model capabilities
+function getValidatedParameters(userParameters: any, modelInfo: any) {
+  const defaults = {
+    temperature: 0.7,
+    max_tokens: 2000,
+    top_p: 1.0,
+    frequency_penalty: 0.0
+  }
+  
+  if (!userParameters) return defaults
+  
+  // Validate max_tokens against model limit
+  const modelMaxTokens = modelInfo?.max_tokens || 4096
+  const requestedMaxTokens = userParameters.max_tokens || defaults.max_tokens
+  const validMaxTokens = Math.min(requestedMaxTokens, modelMaxTokens)
+  
+  return {
+    temperature: Math.max(0, Math.min(1, userParameters.temperature || defaults.temperature)),
+    max_tokens: Math.max(1, validMaxTokens),
+    top_p: Math.max(0.1, Math.min(1, userParameters.top_p || defaults.top_p)),
+    frequency_penalty: Math.max(-2, Math.min(2, userParameters.frequency_penalty || defaults.frequency_penalty))
+  }
+}
+
+// Helper function to create debug callback for LiteLLM calls
+function createDebugCallback(sendEvent: Function, debugMode: boolean, requestId: string) {
+  console.log(`[${requestId}] Creating debug callback, debugMode:`, debugMode)
+  if (!debugMode) {
+    console.log(`[${requestId}] Debug mode disabled, returning undefined callback`)
+    return undefined;
+  }
+  
+  console.log(`[${requestId}] Debug mode enabled, creating callback function`)
+  return (event: any) => {
+    console.log(`[${requestId}] 🐛 DEBUG CALLBACK CALLED:`, event.type, event.data.type || event.data.model)
+    const debugEvent = {
+      id: Math.random().toString(36).substr(2, 9),
+      timestamp: event.timestamp,
+      type: event.type,
+      data: event.data
+    }
+    console.log(`[${requestId}] 🐛 Sending debug event:`, debugEvent)
+    sendEvent('debug_event', debugEvent)
+  }
+}
+
 export async function POST(request: NextRequest) {
   const requestId = Math.random().toString(36).substring(7)
   console.log(`[${requestId}] Crawlplexity Search API called`)
   
   try {
     const body = await request.json()
+    console.log(`[${requestId}] 🔍 RAW REQUEST BODY:`, JSON.stringify(body, null, 2))
+    
     const messages = body.messages || []
     const query = messages[messages.length - 1]?.content || body.query
+    const selectedModel = body.model || 'gpt-4o-mini'
+    const modelInfo = body.modelInfo
+    const userParameters = body.parameters
+    const debugMode = body.debugMode || false // Debug mode from client
+    const validatedParams = getValidatedParameters(userParameters, modelInfo)
+    
     console.log(`[${requestId}] Query received:`, query)
+    console.log(`[${requestId}] Selected model:`, selectedModel, modelInfo?.name)
+    console.log(`[${requestId}] User parameters:`, userParameters)
+    console.log(`[${requestId}] Validated parameters:`, validatedParams)
+    console.log(`[${requestId}] 🐛 DEBUG MODE VALUE:`, debugMode, typeof debugMode)
+    console.log(`[${requestId}] 🐛 DEBUG MODE FROM BODY:`, body.debugMode, typeof body.debugMode)
 
     if (!query) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 })
@@ -50,6 +109,55 @@ export async function POST(request: NextRequest) {
           if (streamClosed) return
           const eventData = `data: ${JSON.stringify({ type, ...data })}\n\n`
           controller.enqueue(encoder.encode(eventData))
+        }
+        
+        // Create debug callback for LiteLLM calls
+        const debugCallback = createDebugCallback(sendEvent, debugMode, requestId)
+        console.log(`[${requestId}] Debug callback created:`, debugCallback !== undefined)
+        
+        // Enable cache debugging if debug mode is on
+        if (debugMode) {
+          console.log(`[${requestId}] 🗄️ Enabling cache debugging`)
+          cacheManager.enableCacheDebugging((cacheEvent) => {
+            console.log(`[${requestId}] 🗄️ Cache debug event:`, cacheEvent.type, cacheEvent.keyPreview)
+            
+            // Convert cache event to debug event format
+            const debugEvent = {
+              id: Math.random().toString(36).substr(2, 9),
+              timestamp: cacheEvent.timestamp,
+              debugType: 'cache_event',
+              data: {
+                type: cacheEvent.type,
+                cacheType: cacheEvent.cacheType,
+                operationType: cacheEvent.operationType,
+                model: cacheEvent.model,
+                queryPreview: cacheEvent.queryPreview,
+                keyPreview: cacheEvent.keyPreview,
+                dataSize: cacheEvent.dataSize,
+                ttl: cacheEvent.ttl,
+                hitCount: cacheEvent.hitCount,
+                message: `Cache ${cacheEvent.type}: ${cacheEvent.keyPreview} (${cacheEvent.cacheType})`
+              }
+            }
+            
+            console.log(`[${requestId}] 🗄️ Sending cache debug event:`, debugEvent)
+            sendEvent('debug_event', debugEvent)
+          })
+        }
+        
+        // Send test debug event if debug mode is enabled
+        if (debugMode) {
+          console.log(`[${requestId}] 🧪 SENDING TEST DEBUG EVENT`)
+          sendEvent('debug_event', {
+            id: 'test-123',
+            timestamp: new Date().toISOString(),
+            debugType: 'request', // Changed from 'type' to 'debugType' to avoid collision
+            data: {
+              type: 'test',
+              model: 'test-model',
+              message: 'Test debug event to verify client-side handling'
+            }
+          })
         }
 
         try {
@@ -257,8 +365,8 @@ export async function POST(request: NextRequest) {
           
           const aiMessages = createMessages(systemPrompt, userPrompt, conversationHistory)
           
-          // Check for cached LLM response
-          const cacheMetadata = { provider: 'litellm', model: 'auto-select' }
+          // Check for cached LLM response  
+          const cacheMetadata = { provider: 'litellm', model: selectedModel }
           const cachedResponse = await cacheManager.getCachedLLMResponse(aiMessages, cacheMetadata)
           
           // Step 8: Generate follow-up questions in parallel using LiteLLM
@@ -285,10 +393,13 @@ export async function POST(request: NextRequest) {
           
           const followUpPromise = litellmClient.completion({
             messages: followUpMessages,
-            temperature: 0.7,
-            max_tokens: 150,
+            model: selectedModel,
+            temperature: validatedParams.temperature,
+            max_tokens: 150, // Follow-up questions should be short
             task_type: 'followup',
-            strategy: process.env.LLM_STRATEGY as any || 'balanced'
+            strategy: process.env.LLM_STRATEGY as any || 'balanced',
+            debug: debugMode,
+            debugCallback: debugCallback
           })
           
           // Step 9: Stream the text generation using LiteLLM
@@ -297,6 +408,26 @@ export async function POST(request: NextRequest) {
           if (cachedResponse) {
             // Use cached response - send as chunks
             console.log(`[${requestId}] Using cached LLM response`)
+            
+            // Send debug event for cache hit
+            if (debugMode) {
+              const cacheHitDebugEvent = {
+                id: Math.random().toString(36).substr(2, 9),
+                timestamp: new Date().toISOString(),
+                debugType: 'cache_hit', // Changed from 'type' to 'debugType'
+                data: {
+                  type: 'cache_hit',
+                  model: selectedModel,
+                  provider: modelInfo?.provider || 'unknown',
+                  cacheHit: true,
+                  message: `Cache Hit: ${selectedModel}`,
+                  contentLength: cachedResponse.choices[0].message.content.length
+                }
+              }
+              console.log(`[${requestId}] ✅ Sending cache hit debug event:`, cacheHitDebugEvent)
+              sendEvent('debug_event', cacheHitDebugEvent)
+            }
+            
             const content = cachedResponse.choices[0].message.content
             
             // Send cached content word by word to simulate streaming
@@ -318,13 +449,45 @@ export async function POST(request: NextRequest) {
             // Generate new response using direct streaming
             console.log(`[${requestId}] Generating new LLM response`)
             
+            // Send debug event for LLM request when cache miss occurs
+            if (debugMode) {
+              const llmRequestDebugEvent = {
+                id: Math.random().toString(36).substr(2, 9),
+                timestamp: new Date().toISOString(),
+                debugType: 'llm_request', // Changed from 'type' to 'debugType'
+                data: {
+                  type: 'llm_request',
+                  model: selectedModel,
+                  provider: modelInfo?.provider || 'unknown',
+                  parameters: {
+                    temperature: validatedParams.temperature,
+                    max_tokens: validatedParams.max_tokens,
+                    top_p: validatedParams.top_p,
+                    frequency_penalty: validatedParams.frequency_penalty
+                  },
+                  cacheHit: false,
+                  message: `LLM Request: ${selectedModel} (temp=${validatedParams.temperature})`,
+                  prompt_preview: aiMessages[aiMessages.length - 1]?.content?.substring(0, 100) + '...',
+                  message_count: aiMessages.length
+                }
+              }
+              console.log(`[${requestId}] 🤖 Sending LLM request debug event:`, llmRequestDebugEvent)
+              sendEvent('debug_event', llmRequestDebugEvent)
+            }
+            
             let fullContent = ''
+            const startTime = Date.now()
             const streamGenerator = litellmClient.streamCompletion({
               messages: aiMessages,
-              temperature: 0.7,
-              max_tokens: 2000,
+              model: selectedModel,
+              temperature: validatedParams.temperature,
+              max_tokens: validatedParams.max_tokens,
+              top_p: validatedParams.top_p,
+              frequency_penalty: validatedParams.frequency_penalty,
               task_type: 'search',
-              strategy: process.env.LLM_STRATEGY as any || 'balanced'
+              strategy: process.env.LLM_STRATEGY as any || 'balanced',
+              debug: debugMode,
+              debugCallback: debugCallback
             })
             
             try {
@@ -352,9 +515,31 @@ export async function POST(request: NextRequest) {
                   finish_reason: 'stop',
                 }],
                 x_metadata: {
-                  selected_provider: 'litellm',
-                  selected_model: 'auto',
+                  selected_provider: modelInfo?.provider || 'litellm',
+                  selected_model: selectedModel,
                 },
+              }
+              
+              // Send debug event for LLM response completion
+              if (debugMode) {
+                const responseTime = Date.now() - startTime
+                const llmResponseDebugEvent = {
+                  id: Math.random().toString(36).substr(2, 9),
+                  timestamp: new Date().toISOString(),
+                  debugType: 'llm_response', // Changed from 'type' to 'debugType'
+                  data: {
+                    type: 'llm_response',
+                    model: selectedModel,
+                    provider: modelInfo?.provider || 'unknown',
+                    responseTime: responseTime,
+                    responseTimeFormatted: `${(responseTime / 1000).toFixed(2)}s`,
+                    contentLength: fullContent.length,
+                    cacheHit: false,
+                    message: `LLM Response: ${selectedModel} - ${(responseTime / 1000).toFixed(2)}s`
+                  }
+                }
+                console.log(`[${requestId}] 🤖 Sending LLM response debug event:`, llmResponseDebugEvent)
+                sendEvent('debug_event', llmResponseDebugEvent)
               }
               
               // Cache the response for future use

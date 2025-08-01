@@ -13,8 +13,14 @@ export function DebugToggle() {
     sidebarState 
   } = useSidebar()
   
+  // Debug logging to see actual state values
+  React.useEffect(() => {
+    console.log('🐛 DebugToggle - debugMode state:', debugMode, typeof debugMode)
+  }, [debugMode])
+  
   const [showLogs, setShowLogs] = useState(false)
   const [copiedLogId, setCopiedLogId] = useState<string | null>(null)
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null)
   
   const isExpanded = sidebarState === 'expanded'
   
@@ -23,6 +29,63 @@ export function DebugToggle() {
     navigator.clipboard.writeText(logText)
     setCopiedLogId(log.id)
     setTimeout(() => setCopiedLogId(null), 2000)
+  }
+  
+  const formatDebugLog = (log: any) => {
+    // Get the debug type from either debugType property or data.type
+    const debugType = log.debugType || log.data?.type || log.type
+    
+    // Format LLM-specific debug events
+    if (debugType === 'llm_request') {
+      const data = log.data
+      return `🤖 LLM Request: ${data.model} (temp=${data.parameters?.temperature}, max=${data.parameters?.max_tokens})`
+    }
+    
+    if (debugType === 'llm_response') {
+      const data = log.data
+      return `📡 LLM Response: ${data.model} - ${data.responseTimeFormatted} (${data.contentLength} chars)`
+    }
+    
+    if (debugType === 'cache_hit') {
+      const data = log.data
+      return `✅ Cache Hit: ${data.model} (${data.contentLength} chars)`
+    }
+    
+    // Format cache-specific debug events
+    if (debugType === 'cache_event') {
+      const data = log.data
+      const icon = data.type === 'cache_hit' ? '✅' : 
+                   data.type === 'cache_miss' ? '❌' : 
+                   data.type === 'cache_set' ? '💾' : 
+                   data.type === 'cache_evict' ? '🗑️' : '🗄️'
+      
+      let description = `${icon} ${data.type.replace('cache_', '').toUpperCase()}: ${data.keyPreview}`
+      
+      if (data.cacheType) {
+        description += ` (${data.cacheType})`
+      }
+      
+      if (data.operationType && data.operationType !== 'generic') {
+        description += ` [${data.operationType}]`
+      }
+      
+      if (data.model) {
+        description += ` - ${data.model}`
+      }
+      
+      if (data.dataSize) {
+        description += ` (${Math.round(data.dataSize / 1024)}KB)`
+      }
+      
+      return description
+    }
+    
+    if (debugType === 'test' || debugType === 'request') {
+      return `🧪 Test: ${log.data?.message || log.message}`
+    }
+    
+    // Default formatting for other types
+    return `${debugType}: ${log.message || JSON.stringify(log.data, null, 2).slice(0, 100)}${JSON.stringify(log).length > 100 ? '...' : ''}`
   }
   
   if (!isExpanded) {
@@ -56,7 +119,10 @@ export function DebugToggle() {
           Debug Mode
         </span>
         <button
-          onClick={() => setDebugMode(!debugMode)}
+          onClick={() => {
+            console.log('🐛 Debug toggle clicked - current state:', debugMode, 'setting to:', !debugMode)
+            setDebugMode(!debugMode)
+          }}
           className={`
             relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2
             ${debugMode ? 'bg-orange-500' : 'bg-gray-200 dark:bg-zinc-700'}
@@ -116,28 +182,48 @@ export function DebugToggle() {
                     key={log.id}
                     className="group relative bg-zinc-900 rounded p-2 text-xs font-mono"
                   >
-                    <div className="flex items-start justify-between gap-2">
+                    <div 
+                      className="flex items-start justify-between gap-2 cursor-pointer"
+                      onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
+                    >
                       <div className="flex-1 min-w-0">
                         <div className="text-green-400 mb-1">
                           {new Date(log.timestamp).toLocaleTimeString()}
                         </div>
                         <div className="text-gray-300 break-all">
-                          {log.type}: {log.message || JSON.stringify(log.data, null, 2).slice(0, 100)}
-                          {JSON.stringify(log).length > 100 && '...'}
+                          {formatDebugLog(log)}
                         </div>
                       </div>
-                      <button
-                        onClick={() => copyLog(log)}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-800 rounded transition-all"
-                        title="Copy log"
-                      >
-                        {copiedLogId === log.id ? (
-                          <Check className="w-3 h-3 text-green-400" />
-                        ) : (
-                          <Copy className="w-3 h-3 text-gray-400" />
-                        )}
-                      </button>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            copyLog(log)
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-800 rounded transition-all"
+                          title="Copy log"
+                        >
+                          {copiedLogId === log.id ? (
+                            <Check className="w-3 h-3 text-green-400" />
+                          ) : (
+                            <Copy className="w-3 h-3 text-gray-400" />
+                          )}
+                        </button>
+                        <div className="w-3 h-3 flex items-center justify-center text-gray-500">
+                          {expandedLogId === log.id ? '−' : '+'}
+                        </div>
+                      </div>
                     </div>
+                    
+                    {/* Expanded details */}
+                    {expandedLogId === log.id && (
+                      <div className="mt-2 pt-2 border-t border-zinc-700 text-xs">
+                        <div className="text-gray-400 mb-2">Details:</div>
+                        <pre className="text-gray-300 whitespace-pre-wrap text-xs overflow-x-auto">
+                          {JSON.stringify(log.data, null, 2)}
+                        </pre>
+                      </div>
+                    )}
                   </div>
                 ))
               )}

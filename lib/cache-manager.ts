@@ -22,6 +22,20 @@ interface CacheStats {
   memoryUsage: number
 }
 
+interface CacheDebugEvent {
+  type: 'cache_hit' | 'cache_miss' | 'cache_set' | 'cache_delete' | 'cache_evict'
+  timestamp: string
+  key: string
+  keyPreview: string
+  cacheType: 'memory' | 'redis' | 'both'
+  operationType?: 'search' | 'llm' | 'generic'
+  model?: string
+  queryPreview?: string
+  dataSize?: number
+  ttl?: number
+  hitCount?: number
+}
+
 export class CacheManager {
   private memoryCache: Map<string, CacheEntry<any>> = new Map()
   private redisClient: any = null
@@ -35,10 +49,237 @@ export class CacheManager {
   }
   private maxMemoryEntries = 1000
   private defaultTTL = 3600 // 1 hour
+  
+  // Debug system
+  private debugEventQueue: CacheDebugEvent[] = []
+  private debugEnabled: boolean = false
+  private debugEventCallback?: (event: CacheDebugEvent) => void
+  private debugProcessingInterval?: NodeJS.Timeout
 
   constructor() {
     this.initRedis()
     this.startCleanupInterval()
+  }
+
+  /**
+   * Enable cache debug mode with optional callback for events
+   */
+  enableCacheDebugging(callback?: (event: CacheDebugEvent) => void): void {
+    this.debugEnabled = true
+    this.debugEventCallback = callback
+    this.startDebugEventProcessing()
+    console.log('🐛 Cache debugging enabled')
+  }
+
+  /**
+   * Disable cache debug mode
+   */
+  disableCacheDebugging(): void {
+    this.debugEnabled = false
+    this.debugEventCallback = undefined
+    if (this.debugProcessingInterval) {
+      clearInterval(this.debugProcessingInterval)
+      this.debugProcessingInterval = undefined
+    }
+    this.debugEventQueue = []
+    console.log('🐛 Cache debugging disabled')
+  }
+
+  /**
+   * Check if cache debugging is enabled
+   */
+  isCacheDebuggingEnabled(): boolean {
+    return this.debugEnabled
+  }
+
+  /**
+   * Add debug event to queue (internal method)
+   */
+  private addDebugEvent(event: Omit<CacheDebugEvent, 'timestamp'>): void {
+    if (!this.debugEnabled) return
+
+    try {
+      const debugEvent: CacheDebugEvent = {
+        ...event,
+        timestamp: new Date().toISOString()
+      }
+
+      // Sanitize sensitive data before adding to queue
+      const sanitizedEvent = this.sanitizeDebugEvent(debugEvent)
+
+      this.debugEventQueue.push(sanitizedEvent)
+
+      // Immediate callback if provided
+      if (this.debugEventCallback) {
+        try {
+          this.debugEventCallback(sanitizedEvent)
+        } catch (callbackError) {
+          console.warn('Debug callback error:', callbackError)
+        }
+      }
+
+      // Limit queue size to prevent memory issues
+      if (this.debugEventQueue.length > 1000) {
+        this.debugEventQueue = this.debugEventQueue.slice(-500) // Keep last 500 events
+        console.log('🐛 Debug queue trimmed to prevent overflow')
+      }
+    } catch (error) {
+      console.warn('Failed to add debug event:', error)
+      // Don't let debug failures affect cache operations
+    }
+  }
+
+  /**
+   * Sanitize debug event data to remove sensitive information
+   */
+  private sanitizeDebugEvent(event: CacheDebugEvent): CacheDebugEvent {
+    const sanitized = { ...event }
+
+    // Sanitize query preview to remove potentially sensitive data
+    if (sanitized.queryPreview) {
+      sanitized.queryPreview = sanitized.queryPreview
+        .replace(/api[_\-]?key[s]?[:\s=]["']?[\w\-]+/gi, 'api_key=***')
+        .replace(/token[s]?[:\s=]["']?[\w\-\.]+/gi, 'token=***')
+        .replace(/password[s]?[:\s=]["']?[\w\-]+/gi, 'password=***')
+        .replace(/secret[s]?[:\s=]["']?[\w\-]+/gi, 'secret=***')
+    }
+
+    // Limit key preview length for security and readability
+    if (sanitized.keyPreview && sanitized.keyPreview.length > 50) {
+      sanitized.keyPreview = sanitized.keyPreview.substring(0, 47) + '...'
+    }
+
+    // Cap data size reporting to prevent info leakage about sensitive content
+    if (sanitized.dataSize && sanitized.dataSize > 1000000) { // 1MB
+      sanitized.dataSize = 1000000 // Cap at 1MB for reporting
+    }
+
+    return sanitized
+  }
+
+  /**
+   * Start processing debug events periodically
+   */
+  private startDebugEventProcessing(): void {
+    if (this.debugProcessingInterval) {
+      clearInterval(this.debugProcessingInterval)
+    }
+
+    // Process events every 5 seconds
+    this.debugProcessingInterval = setInterval(() => {
+      if (this.debugEventQueue.length > 0 && this.debugEventCallback) {
+        // For now, we'll process events individually
+        // Time-grouping will be handled on the frontend
+        const eventsToProcess = [...this.debugEventQueue]
+        this.debugEventQueue = []
+
+        eventsToProcess.forEach(event => {
+          if (this.debugEventCallback) {
+            this.debugEventCallback(event)
+          }
+        })
+      }
+    }, 5000)
+  }
+
+  /**
+   * Extract operation type and metadata from cache key
+   */
+  private extractCacheMetadata(key: string, data?: any): {
+    operationType: 'search' | 'llm' | 'generic'
+    model?: string
+    queryPreview?: string
+    dataSize?: number
+  } {
+    let operationType: 'search' | 'llm' | 'generic' = 'generic'
+    let model: string | undefined
+    let queryPreview: string | undefined
+    let dataSize: number | undefined
+
+    // Determine operation type from cache key pattern
+    if (key.includes('search:') || key.includes('"search"')) {
+      operationType = 'search'
+    } else if (key.includes('llm:') || key.includes('"llm"')) {
+      operationType = 'llm'
+    }
+
+    // Extract metadata with minimal serialization
+    if (data) {
+      try {
+        // Calculate data size efficiently without full serialization
+        if (typeof data === 'string') {
+          dataSize = data.length * 2 // UTF-16 estimate
+        } else if (typeof data === 'object' && data !== null) {
+          // Estimate size without full JSON.stringify for performance
+          dataSize = this.estimateObjectSize(data)
+        }
+
+        // Extract metadata without deep serialization
+        if (operationType === 'llm') {
+          // Try to extract model from LLM responses (shallow access)
+          if (data.x_metadata?.selected_model) {
+            model = String(data.x_metadata.selected_model)
+          } else if (data.model) {
+            model = String(data.model)
+          }
+        }
+
+        // Extract query preview for search results (shallow access)
+        if (operationType === 'search') {
+          if (data.query) {
+            queryPreview = String(data.query).substring(0, 100)
+          } else if (data.originalQuery) {
+            queryPreview = String(data.originalQuery).substring(0, 100)
+          }
+        }
+      } catch (error) {
+        // Silently handle errors to prevent cache operation failures
+        console.warn('Metadata extraction error:', error)
+      }
+    }
+
+    return { operationType, model, queryPreview, dataSize }
+  }
+
+  /**
+   * Estimate object size without full serialization
+   */
+  private estimateObjectSize(obj: any, maxDepth: number = 3): number {
+    if (maxDepth <= 0 || obj === null || obj === undefined) {
+      return 0
+    }
+
+    let size = 0
+    const visited = new Set()
+
+    try {
+      if (visited.has(obj)) return 0
+      visited.add(obj)
+
+      if (typeof obj === 'string') {
+        size += obj.length * 2
+      } else if (typeof obj === 'number' || typeof obj === 'boolean') {
+        size += 8
+      } else if (Array.isArray(obj)) {
+        size += obj.length * 8 // Array overhead
+        for (let i = 0; i < Math.min(obj.length, 100); i++) { // Limit array iteration
+          size += this.estimateObjectSize(obj[i], maxDepth - 1)
+        }
+      } else if (typeof obj === 'object') {
+        const keys = Object.keys(obj)
+        size += keys.length * 32 // Object overhead
+        for (let i = 0; i < Math.min(keys.length, 50); i++) { // Limit object iteration
+          const key = keys[i]
+          size += key.length * 2
+          size += this.estimateObjectSize(obj[key], maxDepth - 1)
+        }
+      }
+    } catch (error) {
+      // Return conservative estimate on error
+      return 1000
+    }
+
+    return Math.min(size, 10000000) // Cap at 10MB estimate
   }
 
   private async initRedis() {
@@ -97,6 +338,18 @@ export class CacheManager {
       this.stats.memoryHits++
       
       console.log(`🎯 Memory cache HIT for key: ${key.substring(0, 8)}...`)
+      
+      // Add debug event
+      const metadata = this.extractCacheMetadata(key, memoryEntry.data)
+      this.addDebugEvent({
+        type: 'cache_hit',
+        key,
+        keyPreview: key.substring(0, 20) + '...',
+        cacheType: 'memory',
+        hitCount: memoryEntry.hits,
+        ...metadata
+      })
+      
       return memoryEntry.data as T
     }
 
@@ -127,6 +380,18 @@ export class CacheManager {
             this.stats.redisHits++
             
             console.log(`🎯 Redis cache HIT for key: ${key.substring(0, 8)}...`)
+            
+            // Add debug event
+            const metadata = this.extractCacheMetadata(key, parsed.data)
+            this.addDebugEvent({
+              type: 'cache_hit',
+              key,
+              keyPreview: key.substring(0, 20) + '...',
+              cacheType: 'redis',
+              hitCount: parsed.hits + 1,
+              ...metadata
+            })
+            
             return parsed.data as T
           } else {
             // Expired in Redis, clean up
@@ -140,6 +405,17 @@ export class CacheManager {
 
     this.stats.redisMisses++
     console.log(`❌ Cache MISS for key: ${key.substring(0, 8)}...`)
+    
+    // Add debug event for cache miss
+    const metadata = this.extractCacheMetadata(key)
+    this.addDebugEvent({
+      type: 'cache_miss',
+      key,
+      keyPreview: key.substring(0, 20) + '...',
+      cacheType: 'both',
+      ...metadata
+    })
+    
     return null
   }
 
@@ -182,6 +458,17 @@ export class CacheManager {
 
     this.updateStats()
     console.log(`💾 Cached data for key: ${key.substring(0, 8)}... (TTL: ${ttlSeconds}s)`)
+    
+    // Add debug event for cache set
+    const metadata = this.extractCacheMetadata(key, data)
+    this.addDebugEvent({
+      type: 'cache_set',
+      key,
+      keyPreview: key.substring(0, 20) + '...',
+      cacheType: 'both',
+      ttl: ttlSeconds,
+      ...metadata
+    })
   }
 
   /**
@@ -368,7 +655,21 @@ export class CacheManager {
       .sort(([, a], [, b]) => a.lastAccess - b.lastAccess)
 
     const toRemove = entries.slice(0, entries.length - this.maxMemoryEntries)
-    toRemove.forEach(([key]) => this.memoryCache.delete(key))
+    
+    // Add debug events for evicted entries
+    toRemove.forEach(([key, entry]) => {
+      this.memoryCache.delete(key)
+      
+      const metadata = this.extractCacheMetadata(key, entry.data)
+      this.addDebugEvent({
+        type: 'cache_evict',
+        key,
+        keyPreview: key.substring(0, 20) + '...',
+        cacheType: 'memory',
+        hitCount: entry.hits,
+        ...metadata
+      })
+    })
 
     console.log(`🧹 Evicted ${toRemove.length} old cache entries`)
   }
