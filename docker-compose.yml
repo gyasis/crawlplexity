@@ -22,7 +22,7 @@ services:
       - crawlplexity
 
   litellm:
-    build: ./litellm-service
+    build: ./lib/litellm-service
     container_name: crawlplexity-litellm
     ports:
       - "14782:14782"
@@ -34,6 +34,8 @@ services:
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
       - LITELLM_PORT=14782
       - LITELLM_HOST=0.0.0.0
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:14782/health"]

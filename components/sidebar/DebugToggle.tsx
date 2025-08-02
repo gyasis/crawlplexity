@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react'
 import { useSidebar } from '@/contexts/SidebarContext'
-import { ChevronDown, Trash2, Copy, Check } from 'lucide-react'
+import { DebugLogsModal } from './DebugLogsModal'
+import { ChevronDown, Trash2, Copy, Check, ExternalLink } from 'lucide-react'
 
 export function DebugToggle() {
   const { 
@@ -19,6 +20,7 @@ export function DebugToggle() {
   }, [debugMode])
   
   const [showLogs, setShowLogs] = useState(false)
+  const [showLogsModal, setShowLogsModal] = useState(false)
   const [copiedLogId, setCopiedLogId] = useState<string | null>(null)
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null)
   
@@ -160,6 +162,14 @@ export function DebugToggle() {
             </button>
             
             <button
+              onClick={() => setShowLogsModal(true)}
+              className="px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-600 dark:text-blue-400 rounded transition-colors"
+              title="Open logs in modal"
+            >
+              <ExternalLink className="w-3 h-3" />
+            </button>
+            
+            <button
               onClick={clearDebugLogs}
               disabled={debugLogs.length === 0}
               className="px-2 py-1 text-xs bg-red-100 dark:bg-red-900 hover:bg-red-200 dark:hover:bg-red-800 text-red-600 dark:text-red-400 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -231,6 +241,12 @@ export function DebugToggle() {
           )}
         </div>
       )}
+      
+      {/* Debug Logs Modal */}
+      <DebugLogsModal 
+        isOpen={showLogsModal}
+        onClose={() => setShowLogsModal(false)}
+      />
     </div>
   )
 }

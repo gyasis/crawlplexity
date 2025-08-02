@@ -48,14 +48,44 @@ export function useCrawlplexityChat() {
       // Get selected model info
       const selectedModelInfo = availableModels.find(m => m.id === selectedModel)
       
-      // Prepare request body
+      // 🚨 MODEL SELECTION BUG FIX: Remove frontend defaulting, ensure model is always passed explicitly
+      console.log('🔍 MODEL SELECTION DEBUG:')
+      console.log('  • selectedModel from context:', selectedModel)
+      console.log('  • selectedModelInfo found:', selectedModelInfo)
+      console.log('  • availableModels count:', availableModels.length)
+      console.log('  • availableModels:', availableModels.map(m => ({ id: m.id, name: m.name, provider: m.provider })))
+      
+      if (!selectedModelInfo) {
+        console.error('❌ No model selected! This should not happen.')
+        setState(prev => ({
+          ...prev,
+          error: 'No model selected. Please select a model from the sidebar.',
+          isLoading: false
+        }))
+        return
+      }
+      
+      // Check if enhanced parameters are available on the window object
+      const enhancedParams = (window as any).fireplexityActiveParameters
+      const parametersToSend = enhancedParams || parameters
+      
+      console.log('🎛️ Parameter System Debug:')
+      console.log('  • Enhanced params available:', !!enhancedParams)
+      console.log('  • Enhanced params:', enhancedParams)
+      console.log('  • Legacy params:', parameters)
+      console.log('  • Final params to send:', parametersToSend)
+      
+      console.log('🎛️ Parameters being sent to API:')
+      console.log('  • Parameters payload:', parametersToSend)
+      
+      // Prepare request body - NEVER default to gpt-4o-mini, always use selected model
       const requestBody = {
         messages: [...state.messages, newMessage],
         query: message.content,
         research_type: options?.researchType || 'comprehensive',
-        model: selectedModelInfo?.id || 'gpt-4o-mini',
+        model: selectedModelInfo.id, // 🔧 FIXED: No more defaulting!
         modelInfo: selectedModelInfo, // Include full model info for API
-        parameters: parameters, // Pass user-selected parameters
+        parameters: parametersToSend, // Pass enhanced or legacy parameters
         debugMode: debugMode // Pass debug mode state
       }
       

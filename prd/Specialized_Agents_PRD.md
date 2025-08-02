@@ -393,6 +393,22 @@ class AgentSerperIntegration:
 
 ## User Interface Design
 
+### 0. Agent Surfacing and Chat Use Case (NEW)
+
+**Use Case:**
+Agents must be directly accessible and visible from the main platform front page. Users should be able to:
+- See a list of active/available agents in the sidebar ("Active Agents").
+- Receive real-time notifications and alerts from agents in the sidebar or as pop-ups.
+- Select an agent and interact with it via a dedicated chat interface in the main workspace ("Agent Chat Interface").
+- Trigger agent actions (e.g., scan, analyze, summarize) with one click from the chat or sidebar ("Agent Quick Actions").
+- View agent responses, task history, and control agent state (start/stop/configure) from the same interface.
+
+**UI/UX Requirements:**
+- The sidebar must include sections for Active Agents, Agent Quick Actions, and Agent Notifications.
+- The main workspace must support an Agent Chat Interface, with agent selection, chat history, and controls.
+- Notifications and alerts from agents should be surfaced in real time, both in the sidebar and as in-app notifications.
+- The design should make agent automation and intelligence a core, user-friendly part of the platform experience.
+
 ### 1. Agent Management Dashboard
 
 #### 1.1 Agent Registry

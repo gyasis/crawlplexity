@@ -12,7 +12,7 @@ import {
   Bug,
 } from 'lucide-react'
 import { ModelSelector } from './ModelSelector'
-import { ParameterControls } from './ParameterControls'
+import { EnhancedParameterControls } from './EnhancedParameterControls'
 import { DebugToggle } from './DebugToggle'
 import { SettingsSection } from './SettingsSection'
 
@@ -108,7 +108,7 @@ export function Sidebar() {
                     <Sliders className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </div>
                 )}
-                {!isCollapsed && <ParameterControls />}
+                {!isCollapsed && <EnhancedParameterControls />}
               </div>
               
               {/* Debug Mode */}

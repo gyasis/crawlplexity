@@ -11,6 +11,7 @@ import { Sidebar } from '@/components/sidebar/Sidebar'
 import { useSidebar } from '@/contexts/SidebarContext'
 import { GeminiKeyWarning } from '@/components/ui/gemini-key-warning'
 import { DeepResearchFallback } from '@/components/ui/deep-research-fallback'
+import { ModelStatusIndicator } from '@/components/ui/model-status-indicator'
 import { useDeepResearch } from './hooks/use-deep-research'
 import { toast } from 'sonner'
 
@@ -31,6 +32,7 @@ export default function CrawlplexityPage() {
   const [showDeepResearchFallback, setShowDeepResearchFallback] = useState(false)
   const [deepResearchError, setDeepResearchError] = useState<string>('')
   const [deepResearchDetails, setDeepResearchDetails] = useState<string[]>([])
+  const [showModelStatus, setShowModelStatus] = useState(false)
   
   // Sidebar context
   const { sidebarState } = useSidebar()
@@ -76,7 +78,16 @@ export default function CrawlplexityPage() {
     if (!isLoading && searchStatus) {
       setSearchStatus('')
     }
-  }, [isLoading, searchStatus])
+    
+    // Auto-hide model status when search completes
+    if (!isLoading && !isResearching && showModelStatus) {
+      const timer = setTimeout(() => {
+        setShowModelStatus(false)
+      }, 12000) // Hide after 12 seconds
+      
+      return () => clearTimeout(timer)
+    }
+  }, [isLoading, isResearching, searchStatus, showModelStatus])
 
   // Handle Gemini API key warnings
   useEffect(() => {
@@ -124,6 +135,7 @@ export default function CrawlplexityPage() {
       
       try {
         // Use the enhanced Deep Research that outputs like regular search
+        setShowModelStatus(true) // Show model status during research
         await append({
           role: 'user',
           content: query
@@ -155,6 +167,7 @@ export default function CrawlplexityPage() {
 
     // Regular search
     setSearchStatus('Starting search...')
+    setShowModelStatus(true) // Show model status during search
     await append({
       role: 'user',
       content: query
@@ -174,6 +187,7 @@ export default function CrawlplexityPage() {
           return
         }
         toast.info('🔬 Starting comprehensive Deep Research...')
+        setShowModelStatus(true) // Show model status during research
         await append({
           role: 'user',
           content: args
@@ -186,6 +200,7 @@ export default function CrawlplexityPage() {
           return
         }
         toast.info('⚡ Starting quick foundation research...')
+        setShowModelStatus(true) // Show model status during research
         await append({
           role: 'user',
           content: args
@@ -198,6 +213,7 @@ export default function CrawlplexityPage() {
           return
         }
         toast.info('📈 Starting trend analysis...')
+        setShowModelStatus(true) // Show model status during research
         await append({
           role: 'user',
           content: args
@@ -379,6 +395,13 @@ export default function CrawlplexityPage() {
         }}
         error={deepResearchError}
         details={deepResearchDetails}
+      />
+
+      {/* Model Status Indicator */}
+      <ModelStatusIndicator
+        isVisible={showModelStatus}
+        position="bottom-right"
+        showDuringSearch={true}
       />
     </>
   )

@@ -13,9 +13,19 @@ export interface LiteLLMRequest {
   model?: string;
   temperature?: number;
   max_tokens?: number;
+  top_p?: number;
+  frequency_penalty?: number;
   stream?: boolean;
   task_type?: 'general' | 'search' | 'summary' | 'followup';
   strategy?: 'performance' | 'cost' | 'balanced' | 'local';
+  debug?: boolean;
+  debugCallback?: (event: DebugEvent) => void;
+}
+
+export interface DebugEvent {
+  type: 'request' | 'response' | 'error';
+  timestamp: string;
+  data: any;
 }
 
 export interface LiteLLMResponse {
@@ -41,6 +51,14 @@ export interface LiteLLMResponse {
     selected_provider: string;
     latency_ms: number;
     cost_per_1k_tokens: number;
+    verification?: {
+      intended_litellm_id: string;
+      actual_response_model: string;
+      model_match_confirmed: boolean;
+      confidence_score: number;
+      verification_method: string;
+      flags: string[];
+    };
   };
 }
 
@@ -140,6 +158,25 @@ export class LiteLLMClient {
       stream: true,
     };
 
+    // Debug logging for request
+    if (request.debug && request.debugCallback) {
+      request.debugCallback({
+        type: 'request',
+        timestamp: new Date().toISOString(),
+        data: {
+          type: 'stream',
+          model: request.model,
+          messages: request.messages,
+          parameters: {
+            temperature: request.temperature,
+            max_tokens: request.max_tokens,
+            task_type: request.task_type
+          },
+          prompt_preview: request.messages[request.messages.length - 1]?.content?.substring(0, 200) + '...'
+        }
+      });
+    }
+
     try {
       const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: 'POST',
@@ -162,6 +199,8 @@ export class LiteLLMClient {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let fullContent = '';
+      let finishReason = '';
 
       try {
         while (true) {
@@ -187,6 +226,14 @@ export class LiteLLMClient {
                   throw new Error(chunk.error.message || 'Stream error');
                 }
                 
+                // Collect response data for debug logging
+                if (chunk.choices?.[0]?.delta?.content) {
+                  fullContent += chunk.choices[0].delta.content;
+                }
+                if (chunk.choices?.[0]?.finish_reason) {
+                  finishReason = chunk.choices[0].finish_reason;
+                }
+                
                 yield chunk as LiteLLMStreamChunk;
               } catch (parseError) {
                 console.warn('Failed to parse stream chunk:', parseError);
@@ -195,11 +242,41 @@ export class LiteLLMClient {
             }
           }
         }
+        
+        // Debug logging for successful response
+        if (request.debug && request.debugCallback) {
+          request.debugCallback({
+            type: 'response',
+            timestamp: new Date().toISOString(),
+            data: {
+              type: 'stream',
+              model: request.model,
+              content_length: fullContent.length,
+              finish_reason: finishReason,
+              success: true
+            }
+          });
+        }
       } finally {
         reader.releaseLock();
       }
     } catch (error) {
       console.error('LiteLLM streaming failed:', error);
+      
+      // Debug logging for error
+      if (request.debug && request.debugCallback) {
+        request.debugCallback({
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          data: {
+            type: 'stream',
+            model: request.model,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            success: false
+          }
+        });
+      }
+      
       throw new Error(`Streaming completion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
@@ -212,6 +289,25 @@ export class LiteLLMClient {
       ...request,
       stream: false,
     };
+
+    // Debug logging for request
+    if (request.debug && request.debugCallback) {
+      request.debugCallback({
+        type: 'request',
+        timestamp: new Date().toISOString(),
+        data: {
+          type: 'completion',
+          model: request.model,
+          messages: request.messages,
+          parameters: {
+            temperature: request.temperature,
+            max_tokens: request.max_tokens,
+            task_type: request.task_type
+          },
+          prompt_preview: request.messages[request.messages.length - 1]?.content?.substring(0, 200) + '...'
+        }
+      });
+    }
 
     try {
       const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
@@ -228,9 +324,41 @@ export class LiteLLMClient {
         throw new Error(`LiteLLM API error (${response.status}): ${errorText}`);
       }
 
-      return await response.json();
+      const result = await response.json();
+      
+      // Debug logging for successful response
+      if (request.debug && request.debugCallback) {
+        request.debugCallback({
+          type: 'response',
+          timestamp: new Date().toISOString(),
+          data: {
+            type: 'completion',
+            model: request.model,
+            content_length: result.choices?.[0]?.message?.content?.length || 0,
+            finish_reason: result.choices?.[0]?.finish_reason,
+            success: true
+          }
+        });
+      }
+
+      return result;
     } catch (error) {
       console.error('LiteLLM completion failed:', error);
+      
+      // Debug logging for error
+      if (request.debug && request.debugCallback) {
+        request.debugCallback({
+          type: 'error',
+          timestamp: new Date().toISOString(),
+          data: {
+            type: 'completion',
+            model: request.model,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            success: false
+          }
+        });
+      }
+      
       throw new Error(`Completion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }

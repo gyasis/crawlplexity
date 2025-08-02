@@ -5,27 +5,62 @@ import { getSearchOrchestrator } from '@/lib/search-orchestrator'
 import { getLiteLLMClient, createMessages } from '@/lib/litellm-client'
 import { getCacheManager } from '@/lib/cache-manager'
 
-// Helper function to validate and apply parameters based on model capabilities
+// Helper function to validate and filter active parameters
 function getValidatedParameters(userParameters: any, modelInfo: any) {
   const defaults = {
     temperature: 0.7,
-    max_tokens: 2000,
-    top_p: 1.0,
-    frequency_penalty: 0.0
+    max_tokens: 200000, // Updated to match new default
+    stream: true // Enable streaming by default
   }
   
   if (!userParameters) return defaults
   
-  // Validate max_tokens against model limit
-  const modelMaxTokens = modelInfo?.max_tokens || 4096
+  // Check if using new enhanced parameter format with active/inactive states
+  if (userParameters.activeParameters && typeof userParameters.activeParameters === 'object') {
+    // New enhanced parameter system
+    const activeParams: any = {}
+    
+    // Extract only active parameters
+    Object.entries(userParameters.activeParameters).forEach(([key, paramData]: [string, any]) => {
+      if (paramData && typeof paramData === 'object' && paramData.active && paramData.value !== undefined) {
+        activeParams[key] = paramData.value
+      }
+    })
+    
+    // Always ensure essential parameters are included
+    if (!activeParams.temperature && userParameters.activeParameters.temperature) {
+      activeParams.temperature = userParameters.activeParameters.temperature.value || defaults.temperature
+    }
+    if (!activeParams.max_tokens && userParameters.activeParameters.max_tokens) {
+      activeParams.max_tokens = userParameters.activeParameters.max_tokens.value || defaults.max_tokens
+    }
+    if (!activeParams.stream && userParameters.activeParameters.stream) {
+      activeParams.stream = userParameters.activeParameters.stream.value !== undefined ? userParameters.activeParameters.stream.value : defaults.stream
+    }
+    
+    console.log('🎛️ Enhanced parameters - Active:', Object.keys(activeParams).length, 'Total received:', Object.keys(userParameters.activeParameters).length)
+    return activeParams
+  }
+  
+  // Legacy parameter system (backward compatibility)
+  const modelMaxTokens = modelInfo?.max_tokens || 200000
   const requestedMaxTokens = userParameters.max_tokens || defaults.max_tokens
   const validMaxTokens = Math.min(requestedMaxTokens, modelMaxTokens)
   
   return {
-    temperature: Math.max(0, Math.min(1, userParameters.temperature || defaults.temperature)),
+    temperature: Math.max(0, Math.min(2, userParameters.temperature || defaults.temperature)),
     max_tokens: Math.max(1, validMaxTokens),
-    top_p: Math.max(0.1, Math.min(1, userParameters.top_p || defaults.top_p)),
-    frequency_penalty: Math.max(-2, Math.min(2, userParameters.frequency_penalty || defaults.frequency_penalty))
+    stream: userParameters.stream !== undefined ? userParameters.stream : defaults.stream,
+    top_p: userParameters.top_p !== undefined ? Math.max(0.0, Math.min(1, userParameters.top_p)) : undefined,
+    frequency_penalty: userParameters.frequency_penalty !== undefined ? Math.max(-2, Math.min(2, userParameters.frequency_penalty)) : undefined,
+    presence_penalty: userParameters.presence_penalty !== undefined ? Math.max(-2, Math.min(2, userParameters.presence_penalty)) : undefined,
+    // Include other parameters if provided
+    ...Object.fromEntries(
+      Object.entries(userParameters).filter(([key, value]) => 
+        !['temperature', 'max_tokens', 'stream', 'top_p', 'frequency_penalty', 'presence_penalty'].includes(key) && 
+        value !== undefined && value !== null
+      )
+    )
   }
 }
 
@@ -61,18 +96,32 @@ export async function POST(request: NextRequest) {
     
     const messages = body.messages || []
     const query = messages[messages.length - 1]?.content || body.query
-    const selectedModel = body.model || 'gpt-4o-mini'
+    const selectedModel = body.model // 🔧 FIXED: No more defaulting to gpt-4o-mini!
     const modelInfo = body.modelInfo
     const userParameters = body.parameters
     const debugMode = body.debugMode || false // Debug mode from client
+    
+    // 🚨 MODEL SELECTION BUG FIX: Validate that model is provided
+    if (!selectedModel) {
+      console.error(`[${requestId}] ❌ No model provided in request!`)
+      return NextResponse.json({ 
+        error: 'Model selection required',
+        suggestion: 'Please select a model from the sidebar before making a request'
+      }, { status: 400 })
+    }
+    
     const validatedParams = getValidatedParameters(userParameters, modelInfo)
     
-    console.log(`[${requestId}] Query received:`, query)
-    console.log(`[${requestId}] Selected model:`, selectedModel, modelInfo?.name)
-    console.log(`[${requestId}] User parameters:`, userParameters)
-    console.log(`[${requestId}] Validated parameters:`, validatedParams)
-    console.log(`[${requestId}] 🐛 DEBUG MODE VALUE:`, debugMode, typeof debugMode)
-    console.log(`[${requestId}] 🐛 DEBUG MODE FROM BODY:`, body.debugMode, typeof body.debugMode)
+    // 🔍 Enhanced logging for model selection debugging
+    console.log(`[${requestId}] 🔥 MODEL SELECTION DEBUG:`)
+    console.log(`[${requestId}]   • Query:`, query)
+    console.log(`[${requestId}]   • Selected model ID:`, selectedModel)
+    console.log(`[${requestId}]   • Model info name:`, modelInfo?.name)
+    console.log(`[${requestId}]   • Model info provider:`, modelInfo?.provider)
+    console.log(`[${requestId}]   • Model info category:`, modelInfo?.category)
+    console.log(`[${requestId}]   • User parameters:`, userParameters)
+    console.log(`[${requestId}]   • Validated parameters:`, validatedParams)
+    console.log(`[${requestId}]   • Debug mode:`, debugMode, typeof debugMode)
 
     if (!query) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 })
@@ -305,6 +354,12 @@ export async function POST(request: NextRequest) {
           }
           
           // Step 7: Prepare messages for the AI using LiteLLM
+          console.log(`[${requestId}] 🤖 PREPARING LLM CALL:`)
+          console.log(`[${requestId}]   • Using model: ${selectedModel}`)
+          console.log(`[${requestId}]   • Provider: ${modelInfo?.provider || 'unknown'}`)
+          console.log(`[${requestId}]   • Temperature: ${validatedParams.temperature}`)
+          console.log(`[${requestId}]   • Max tokens: ${validatedParams.max_tokens}`)
+          
           let systemPrompt: string
           let userPrompt: string
           let conversationHistory: any[] = []
@@ -391,6 +446,10 @@ export async function POST(request: NextRequest) {
           
           const followUpMessages = createMessages(followUpSystemPrompt, followUpUserPrompt)
           
+          // 🔍 Log follow-up question model usage too
+          console.log(`[${requestId}] 🔄 FOLLOW-UP QUESTIONS CALL:`)
+          console.log(`[${requestId}]   • model: "${selectedModel}"`)
+          
           const followUpPromise = litellmClient.completion({
             messages: followUpMessages,
             model: selectedModel,
@@ -409,22 +468,37 @@ export async function POST(request: NextRequest) {
             // Use cached response - send as chunks
             console.log(`[${requestId}] Using cached LLM response`)
             
-            // Send debug event for cache hit
+            // Send debug event for cache hit with verification data if available
             if (debugMode) {
+              const verification = cachedResponse?.x_metadata?.verification
+              
               const cacheHitDebugEvent = {
                 id: Math.random().toString(36).substr(2, 9),
                 timestamp: new Date().toISOString(),
                 debugType: 'cache_hit', // Changed from 'type' to 'debugType'
                 data: {
                   type: 'cache_hit',
-                  model: selectedModel,
+                  requested_model: selectedModel, // What was originally requested
+                  selected_model: cachedResponse?.x_metadata?.selected_model || selectedModel, // What was actually used (from cache)
+                  selected_provider: cachedResponse?.x_metadata?.selected_provider || modelInfo?.provider || 'unknown',
                   provider: modelInfo?.provider || 'unknown',
                   cacheHit: true,
-                  message: `Cache Hit: ${selectedModel}`,
+                  verification: verification ? {
+                    intended_litellm_id: verification.intended_litellm_id,
+                    actual_response_model: verification.actual_response_model,
+                    model_match_confirmed: verification.model_match_confirmed,
+                    confidence_score: verification.confidence_score,
+                    verification_method: verification.verification_method,
+                    flags: verification.flags || []
+                  } : null,
+                  metadata: cachedResponse?.x_metadata,
+                  message: verification && verification.model_match_confirmed
+                    ? `✅ Verified Cache Hit: ${cachedResponse?.x_metadata?.selected_model || selectedModel}`
+                    : `🗄️ Cache Hit: ${selectedModel}`,
                   contentLength: cachedResponse.choices[0].message.content.length
                 }
               }
-              console.log(`[${requestId}] ✅ Sending cache hit debug event:`, cacheHitDebugEvent)
+              console.log(`[${requestId}] ✅ Sending cache hit debug event with verification:`, cacheHitDebugEvent)
               sendEvent('debug_event', cacheHitDebugEvent)
             }
             
@@ -477,6 +551,16 @@ export async function POST(request: NextRequest) {
             
             let fullContent = ''
             const startTime = Date.now()
+            
+            // 🚨 CRITICAL: Log the EXACT model being sent to LiteLLM
+            console.log(`[${requestId}] 🎯 FINAL LLM CALL PARAMETERS:`)
+            console.log(`[${requestId}]   • model: "${selectedModel}"`)
+            console.log(`[${requestId}]   • temperature: ${validatedParams.temperature}`)
+            console.log(`[${requestId}]   • max_tokens: ${validatedParams.max_tokens}`)
+            console.log(`[${requestId}]   • task_type: 'search'`)
+            console.log(`[${requestId}]   • strategy: '${process.env.LLM_STRATEGY || 'balanced'}'`)
+            console.log(`[${requestId}]   • debug: ${debugMode}`)
+            
             const streamGenerator = litellmClient.streamCompletion({
               messages: aiMessages,
               model: selectedModel,
@@ -520,25 +604,40 @@ export async function POST(request: NextRequest) {
                 },
               }
               
-              // Send debug event for LLM response completion
+              // Send debug event for LLM response completion with verification data
               if (debugMode) {
                 const responseTime = Date.now() - startTime
+                const verification = llmResponse?.x_metadata?.verification
+                
                 const llmResponseDebugEvent = {
                   id: Math.random().toString(36).substr(2, 9),
                   timestamp: new Date().toISOString(),
                   debugType: 'llm_response', // Changed from 'type' to 'debugType'
                   data: {
                     type: 'llm_response',
-                    model: selectedModel,
+                    requested_model: selectedModel, // What was originally requested
+                    selected_model: llmResponse?.x_metadata?.selected_model || selectedModel, // What was actually selected
+                    selected_provider: llmResponse?.x_metadata?.selected_provider || modelInfo?.provider || 'unknown',
                     provider: modelInfo?.provider || 'unknown',
                     responseTime: responseTime,
                     responseTimeFormatted: `${(responseTime / 1000).toFixed(2)}s`,
                     contentLength: fullContent.length,
                     cacheHit: false,
-                    message: `LLM Response: ${selectedModel} - ${(responseTime / 1000).toFixed(2)}s`
+                    verification: verification ? {
+                      intended_litellm_id: verification.intended_litellm_id,
+                      actual_response_model: verification.actual_response_model,
+                      model_match_confirmed: verification.model_match_confirmed,
+                      confidence_score: verification.confidence_score,
+                      verification_method: verification.verification_method,
+                      flags: verification.flags || []
+                    } : null,
+                    metadata: llmResponse?.x_metadata,
+                    message: verification && verification.model_match_confirmed
+                      ? `✅ Verified LLM Response: ${llmResponse?.x_metadata?.selected_model || selectedModel} - ${(responseTime / 1000).toFixed(2)}s`
+                      : `⚠️ LLM Response: ${selectedModel} - ${(responseTime / 1000).toFixed(2)}s`
                   }
                 }
-                console.log(`[${requestId}] 🤖 Sending LLM response debug event:`, llmResponseDebugEvent)
+                console.log(`[${requestId}] 🤖 Sending LLM response debug event with verification:`, llmResponseDebugEvent)
                 sendEvent('debug_event', llmResponseDebugEvent)
               }
               

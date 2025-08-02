@@ -9,10 +9,14 @@ export function ParameterControls() {
     parameters, 
     updateParameter, 
     resetParameters,
-    sidebarState 
+    sidebarState,
+    availableModels,
+    selectedModel
   } = useSidebar()
   
   const isExpanded = sidebarState === 'expanded'
+  const selectedModelInfo = availableModels.find(m => m.id === selectedModel)
+  const modelMaxTokens = selectedModelInfo?.max_tokens || 4096
   
   if (!isExpanded) {
     // Semi-collapsed view - just show a summary icon
@@ -66,25 +70,27 @@ export function ParameterControls() {
           <input
             type="number"
             min="1"
-            max="4096"
+            max={modelMaxTokens}
             value={parameters.max_tokens}
             onChange={(e) => {
               const value = parseInt(e.target.value)
-              if (!isNaN(value) && value > 0 && value <= 4096) {
+              if (!isNaN(value) && value > 0 && value <= modelMaxTokens) {
                 updateParameter('max_tokens', value)
               }
             }}
             className="w-20 px-2 py-1 text-sm bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-gray-700 rounded focus:outline-none focus:ring-2 focus:ring-orange-500"
+            title={`Max tokens for ${selectedModelInfo?.name || 'this model'}: ${modelMaxTokens.toLocaleString()}`}
           />
         </div>
         <input
           type="range"
           min="100"
-          max="4096"
+          max={modelMaxTokens}
           step="100"
-          value={parameters.max_tokens}
+          value={Math.min(parameters.max_tokens, modelMaxTokens)}
           onChange={(e) => updateParameter('max_tokens', parseInt(e.target.value))}
           className="w-full h-2 bg-gray-200 dark:bg-zinc-700 rounded-lg appearance-none cursor-pointer slider"
+          title={`Slide to adjust max tokens (up to ${modelMaxTokens.toLocaleString()})`}
         />
       </div>
       

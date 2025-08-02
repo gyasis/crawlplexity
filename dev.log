@@ -1,0 +1,39 @@
+
+> crawlplexity@1.0.0 dev
+> next dev --turbopack --port 18563
+
+   ▲ Next.js 15.3.2 (Turbopack)
+   - Local:        http://localhost:18563
+   - Network:      http://192.168.0.112:18563
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 8.4s
+ ○ Compiling / ...
+ ✓ Compiled / in 9.2s
+Crawlplexity Chat State: {
+  messagesCount: 0,
+  sourcesCount: 0,
+  isLoading: false,
+  error: undefined
+}
+ GET / 200 in 9794ms
+ ✓ Compiled in 356ms
+ ○ Compiling /api/models/litellm/parameters/schema ...
+ ✓ Compiled /api/models/litellm/parameters/schema in 932ms
+📋 Fetching parameter schema from LiteLLM service
+✅ Retrieved parameter schema with 32 parameters
+ GET /api/models/litellm/parameters/schema 200 in 1068ms
+📋 Fetching parameter schema from LiteLLM service
+✅ Retrieved parameter schema with 32 parameters
+ GET /api/models/litellm/parameters/schema 200 in 48ms
+📋 Fetching parameter schema from LiteLLM service
+✅ Retrieved parameter schema with 32 parameters
+ GET /api/models/litellm/parameters/schema 200 in 107ms
+📋 Fetching parameter schema from LiteLLM service
+✅ Retrieved parameter schema with 32 parameters
+ GET /api/models/litellm/parameters/schema 200 in 140ms
+📋 Fetching parameter schema from LiteLLM service
+✅ Retrieved parameter schema with 32 parameters
+ GET /api/models/litellm/parameters/schema 200 in 376ms
+[?25h
