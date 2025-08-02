@@ -1,15 +1,16 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { useSidebar } from '@/contexts/SidebarContext'
 import { 
   ChevronLeft, 
-  ChevronRight, 
+  Menu, 
   Settings, 
   Activity, 
   Cpu, 
   Sliders,
   Bug,
+  ChevronDown
 } from 'lucide-react'
 import { ModelSelector } from './ModelSelector'
 import { EnhancedParameterControls } from './EnhancedParameterControls'
@@ -18,6 +19,10 @@ import { SettingsSection } from './SettingsSection'
 
 export function Sidebar() {
   const { sidebarState, setSidebarState } = useSidebar()
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(true)
+  const [parametersOpen, setParametersOpen] = useState(true)
+  const [debugOpen, setDebugOpen] = useState(true)
+  const [settingsOpen, setSettingsOpen] = useState(true)
   
   const toggleSidebar = () => {
     if (sidebarState === 'collapsed') {
@@ -45,7 +50,7 @@ export function Sidebar() {
       `}>
         {/* Header */}
         <div className="border-b border-gray-200 dark:border-gray-700">
-          {isExpanded ? (
+          {isExpanded && (
             <div className="flex items-center justify-between p-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
@@ -61,7 +66,8 @@ export function Sidebar() {
                 <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
-          ) : (
+          )}
+          {isSemiCollapsed && (
             <div className="p-3 flex justify-center">
               <button
                 onClick={toggleSidebar}
@@ -82,9 +88,15 @@ export function Sidebar() {
               {/* Model Selection */}
               <div className="space-y-2">
                 {isExpanded && (
-                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    <Cpu className="w-4 h-4" />
-                    <span>Model</span>
+                  <div 
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setModelSelectorOpen(!modelSelectorOpen)}
+                  >
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <Cpu className="w-4 h-4" />
+                      <span>Model</span>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform ${modelSelectorOpen ? 'rotate-180' : ''}`} />
                   </div>
                 )}
                 {isSemiCollapsed && (
@@ -92,15 +104,21 @@ export function Sidebar() {
                     <Cpu className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </div>
                 )}
-                {!isCollapsed && <ModelSelector />}
+                {((isExpanded && modelSelectorOpen) || isSemiCollapsed) && !isCollapsed && <ModelSelector />}
               </div>
               
               {/* Parameters */}
               <div className="space-y-2">
                 {isExpanded && (
-                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    <Sliders className="w-4 h-4" />
-                    <span>Parameters</span>
+                  <div 
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setParametersOpen(!parametersOpen)}
+                  >
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <Sliders className="w-4 h-4" />
+                      <span>Parameters</span>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform ${parametersOpen ? 'rotate-180' : ''}`} />
                   </div>
                 )}
                 {isSemiCollapsed && (
@@ -108,15 +126,21 @@ export function Sidebar() {
                     <Sliders className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </div>
                 )}
-                {!isCollapsed && <EnhancedParameterControls />}
+                {((isExpanded && parametersOpen) || isSemiCollapsed) && !isCollapsed && <EnhancedParameterControls />}
               </div>
               
               {/* Debug Mode */}
               <div className="space-y-2">
                 {isExpanded && (
-                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    <Bug className="w-4 h-4" />
-                    <span>Debug</span>
+                  <div 
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setDebugOpen(!debugOpen)}
+                  >
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <Bug className="w-4 h-4" />
+                      <span>Debug</span>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform ${debugOpen ? 'rotate-180' : ''}`} />
                   </div>
                 )}
                 {isSemiCollapsed && (
@@ -124,15 +148,21 @@ export function Sidebar() {
                     <Bug className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </div>
                 )}
-                {!isCollapsed && <DebugToggle />}
+                {((isExpanded && debugOpen) || isSemiCollapsed) && !isCollapsed && <DebugToggle />}
               </div>
               
               {/* Settings */}
               <div className="space-y-2">
                 {isExpanded && (
-                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                    <Settings className="w-4 h-4" />
-                    <span>Settings</span>
+                  <div 
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setSettingsOpen(!settingsOpen)}
+                  >
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <Settings className="w-4 h-4" />
+                      <span>Settings</span>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform ${settingsOpen ? 'rotate-180' : ''}`} />
                   </div>
                 )}
                 {isSemiCollapsed && (
@@ -140,7 +170,7 @@ export function Sidebar() {
                     <Settings className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                   </div>
                 )}
-                {!isCollapsed && <SettingsSection />}
+                {((isExpanded && settingsOpen) || isSemiCollapsed) && !isCollapsed && <SettingsSection />}
               </div>
             </div>
           </div>
@@ -170,14 +200,14 @@ export function Sidebar() {
           title="Open sidebar"
           aria-label="Open sidebar"
         >
-          <ChevronRight className="w-5 h-5 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-400" />
+          <Menu className="w-5 h-5 sm:w-4 sm:h-4 text-gray-600 dark:text-gray-400" />
         </button>
       )}
       
       {/* Content padding when sidebar is open */}
       <div className={`
         transition-all duration-300 ease-in-out
-        ${isCollapsed ? 'ml-0' : 
+        ${isCollapsed ? 'ml-12 sm:ml-16' : 
           isSemiCollapsed ? 'ml-12 sm:ml-16' : 'ml-56 sm:ml-80'}
         max-w-full
       `} />
