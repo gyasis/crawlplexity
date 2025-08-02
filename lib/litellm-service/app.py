@@ -40,47 +40,90 @@ def find_best_model_match(requested_model: str, available_models: List[str]) -> 
     Handles remote model IDs like: remote_edl9t5a53mdsu3ttw_mistral-nemo:12b
     Maps to available models like: mistral-nemo:12b
     
-    Ensures accuracy for similar models like mistral:10b vs mistral:22b
+    Always picks the TOP scoring result to ensure consistent behavior.
     """
     if not requested_model or not available_models:
         return None
     
     logger.info(f"🔍 Fuzzy matching '{requested_model}' against {len(available_models)} available models")
     
-    # Clean the requested model name by removing remote prefixes
-    clean_requested = requested_model
-    
-    # Remove remote ID prefixes (remote_<id>_)
-    if clean_requested.startswith('remote_'):
-        # Pattern: remote_<id>_<model_name>
-        parts = clean_requested.split('_', 2)  # Split into max 3 parts
-        if len(parts) >= 3:
-            clean_requested = parts[2]  # Take everything after remote_<id>_
-            logger.info(f"  • Cleaned remote ID: '{requested_model}' → '{clean_requested}'")
+    # Enhanced cleaning: strip ALL remote prefixes more aggressively
+    clean_requested = strip_remote_prefixes(requested_model)
+    if clean_requested != requested_model:
+        logger.info(f"  • Cleaned remote ID: '{requested_model}' → '{clean_requested}'")
     
     # Try exact match with cleaned name first
     if clean_requested in available_models:
         logger.info(f"  • ✅ Exact match found: '{clean_requested}'")
         return clean_requested
     
-    # For fuzzy matching, we'll use a scoring system
-    best_match = None
-    best_score = 0
-    
+    # Calculate similarity scores for ALL models and sort by score
+    model_scores = []
     for available_model in available_models:
         score = calculate_model_similarity(clean_requested, available_model)
+        model_scores.append((available_model, score))
         logger.info(f"  • '{available_model}': score={score:.3f}")
+    
+    # Sort by score descending - ALWAYS pick the top result
+    model_scores.sort(key=lambda x: x[1], reverse=True)
+    
+    if model_scores:
+        best_model, best_score = model_scores[0]
         
-        if score > best_score and score >= 0.7:  # Minimum threshold of 70% similarity
-            best_score = score
-            best_match = available_model
+        # Apply minimum threshold but still return the best if it's reasonable
+        if best_score >= 0.7:
+            logger.info(f"  • ✅ Top match (high confidence): '{best_model}' (score={best_score:.3f})")
+            return best_model
+        elif best_score >= 0.4:
+            logger.info(f"  • 🟡 Top match (medium confidence): '{best_model}' (score={best_score:.3f})")
+            return best_model
+        else:
+            logger.info(f"  • ❌ Top match too low confidence: '{best_model}' (score={best_score:.3f}) - rejecting")
+            return None
     
-    if best_match:
-        logger.info(f"  • ✅ Best fuzzy match: '{best_match}' (score={best_score:.3f})")
-    else:
-        logger.info(f"  • ❌ No suitable fuzzy match found (best score: {best_score:.3f})")
+    logger.info(f"  • ❌ No models available for matching")
+    return None
+
+def strip_remote_prefixes(model_name: str) -> str:
+    """
+    Enhanced remote prefix stripping for better fuzzy matching.
     
-    return best_match
+    Handles patterns like:
+    - remote_edl9t5a53mdsu3ttw_mistral-nemo:12b → mistral-nemo:12b
+    - remote_abc123_gpt-4 → gpt-4
+    - remote_xyz_provider/model:tag → provider/model:tag
+    """
+    if not model_name:
+        return model_name
+    
+    original = model_name
+    
+    # Pattern 1: remote_<alphanumeric_id>_<model_name>
+    # Only apply this if we have at least 3 parts and the second part looks like an ID
+    if model_name.startswith('remote_'):
+        parts = model_name.split('_')
+        if len(parts) >= 3:
+            # Check if the second part looks like an ID (alphanumeric, at least 3 chars)
+            potential_id = parts[1]
+            if len(potential_id) >= 3 and potential_id.replace('-', '').isalnum():
+                # Join everything from the 3rd part onwards (in case model name has underscores)
+                model_name = '_'.join(parts[2:])
+                logger.info(f"  • Stripped remote ID: '{original}' → '{model_name}' (ID: '{potential_id}')")
+        
+        # If we still have remote_ prefix and it wasn't a valid pattern, don't modify it
+        # This handles cases like "remote_only_one_underscore" correctly
+    
+    # Pattern 2: Strip any remaining remote- prefixes
+    if model_name.startswith('remote-'):
+        model_name = model_name[7:]  # Remove "remote-"
+        logger.info(f"  • Stripped remote- prefix: '{original}' → '{model_name}'")
+    
+    # Pattern 3: Strip remote: prefixes  
+    if model_name.startswith('remote:'):
+        model_name = model_name[7:]  # Remove "remote:"
+        logger.info(f"  • Stripped remote: prefix: '{original}' → '{model_name}'")
+    
+    return model_name.strip()
 
 def calculate_model_similarity(requested: str, available: str) -> float:
     """
