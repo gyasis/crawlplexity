@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY app.py .
+COPY parameters.json .
 COPY .env* ./
 
 # Create non-root user for security

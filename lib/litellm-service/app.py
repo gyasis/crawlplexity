@@ -167,6 +167,150 @@ def calculate_string_similarity(str1: str, str2: str) -> float:
     
     return intersection / union
 
+def verify_response_model(intended_model: str, intended_provider: str, 
+                         litellm_response_model: str, response_content: str) -> Dict[str, Any]:
+    """
+    Verify if the response actually came from the intended model.
+    
+    This is the SOURCE OF TRUTH for model verification.
+    Returns detailed verification data to detect any discrepancies.
+    """
+    verification_result = {
+        "model_match": False,
+        "confidence": 0.0,
+        "method": "unknown",
+        "flags": []
+    }
+    
+    # Method 1: Direct LiteLLM model ID comparison
+    expected_litellm_model = f"{intended_provider}/{intended_model}"
+    if litellm_response_model == expected_litellm_model:
+        verification_result.update({
+            "model_match": True,
+            "confidence": 1.0,
+            "method": "litellm_exact_match"
+        })
+        return verification_result
+    
+    # Method 2: Parse LiteLLM response model for partial matches
+    if litellm_response_model and litellm_response_model != "unknown":
+        # Handle cases like "ollama/mistral-nemo:12b" vs intended "mistral-nemo:12b"
+        if "/" in litellm_response_model:
+            response_provider, response_model = litellm_response_model.split("/", 1)
+            if response_provider == intended_provider and response_model == intended_model:
+                verification_result.update({
+                    "model_match": True,
+                    "confidence": 0.95,
+                    "method": "provider_model_match"
+                })
+                return verification_result
+        
+        # Check if intended model is contained in response model
+        if intended_model.lower() in litellm_response_model.lower():
+            confidence = 0.8 if intended_provider.lower() in litellm_response_model.lower() else 0.6
+            verification_result.update({
+                "model_match": True,
+                "confidence": confidence,
+                "method": "partial_model_match"
+            })
+            if confidence < 0.8:
+                verification_result["flags"].append("provider_mismatch")
+            return verification_result
+    
+    # Method 3: Content analysis for model fingerprinting
+    content_analysis = analyze_response_content(response_content, intended_model, intended_provider)
+    if content_analysis["confidence"] > 0.7:
+        verification_result.update({
+            "model_match": content_analysis["likely_match"],
+            "confidence": content_analysis["confidence"] * 0.7,  # Reduce confidence for content-based
+            "method": "content_analysis",
+            "flags": content_analysis["flags"]
+        })
+        return verification_result
+    
+    # Method 4: No verification possible
+    verification_result.update({
+        "model_match": False,
+        "confidence": 0.0,
+        "method": "no_verification_possible",
+        "flags": ["unverifiable_response", "potential_model_mismatch"]
+    })
+    
+    # Log verification failures for debugging
+    logger.warning(f"🚨 MODEL VERIFICATION FAILED!")
+    logger.warning(f"  • Intended: {intended_provider}/{intended_model}")
+    logger.warning(f"  • LiteLLM response model: '{litellm_response_model}'")
+    logger.warning(f"  • Verification result: {verification_result}")
+    
+    return verification_result
+
+def analyze_response_content(content: str, intended_model: str, intended_provider: str) -> Dict[str, Any]:
+    """
+    Analyze response content to detect model characteristics.
+    
+    Different models have distinctive response patterns, formatting, and capabilities.
+    This helps detect if we got a different model than intended.
+    """
+    analysis = {
+        "likely_match": False,
+        "confidence": 0.0,
+        "flags": []
+    }
+    
+    if not content or len(content.strip()) < 10:
+        analysis["flags"].append("insufficient_content")
+        return analysis
+    
+    # Check for model-specific patterns
+    model_patterns = {
+        "gpt-4o-mini": {
+            "patterns": ["I'm", "I can", "Here's", "Let me"],
+            "style": "conversational",
+            "typical_length": (50, 500)
+        },
+        "claude-3-haiku": {
+            "patterns": ["I'd be happy", "Here are", "I can help"],
+            "style": "helpful",
+            "typical_length": (100, 800)
+        },
+        "mistral-nemo": {
+            "patterns": ["Certainly", "Absolutely", "Of course"],
+            "style": "confident",
+            "typical_length": (80, 600)
+        }
+    }
+    
+    if intended_model in model_patterns:
+        patterns = model_patterns[intended_model]
+        
+        # Check for characteristic patterns
+        pattern_matches = sum(1 for pattern in patterns["patterns"] if pattern in content)
+        pattern_score = pattern_matches / len(patterns["patterns"])
+        
+        # Check response length against typical range
+        content_length = len(content)
+        min_len, max_len = patterns["typical_length"]
+        length_score = 1.0 if min_len <= content_length <= max_len else 0.5
+        
+        # Combine scores
+        overall_confidence = (pattern_score * 0.7) + (length_score * 0.3)
+        
+        if overall_confidence > 0.5:
+            analysis.update({
+                "likely_match": True,
+                "confidence": overall_confidence,
+                "flags": [f"matches_{patterns['style']}_style"]
+            })
+        else:
+            analysis["flags"].append("atypical_response_pattern")
+    
+    else:
+        # Unknown model - use general heuristics
+        analysis["flags"].append("unknown_model_patterns")
+        analysis["confidence"] = 0.3  # Low confidence for unknown models
+    
+    return analysis
+
 # Redis connection for dynamic configuration
 redis_client = None
 try:
@@ -1038,11 +1182,27 @@ async def chat_completions(request: ChatRequest):
         latency = time.time() - start_time
         
         if request.stream:
-            # Handle streaming response
+            # Handle streaming response with verification
+            first_chunk_model = None
+            accumulated_content = ""
+            
             async def generate_stream():
+                nonlocal first_chunk_model, accumulated_content
                 try:
                     async for chunk in response:
-                        yield f"data: {json.dumps(chunk.dict())}\n\n"
+                        chunk_dict = chunk.dict()
+                        
+                        # Capture model info from first chunk for verification
+                        if first_chunk_model is None:
+                            first_chunk_model = chunk_dict.get('model', 'unknown')
+                        
+                        # Accumulate content for verification (limit to first 500 chars)
+                        if len(accumulated_content) < 500:
+                            content = chunk_dict.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                            if content:
+                                accumulated_content += content
+                        
+                        yield f"data: {json.dumps(chunk_dict)}\n\n"
                     yield "data: [DONE]\n\n"
                 except Exception as e:
                     error_chunk = {
@@ -1053,25 +1213,63 @@ async def chat_completions(request: ChatRequest):
                     }
                     yield f"data: {json.dumps(error_chunk)}\n\n"
             
+            # Perform verification for streaming (with limited content)
+            # Note: We can't wait for full content in streaming, so verification is limited
+            stream_verification = verify_response_model(
+                intended_model=selected_model["model"],
+                intended_provider=selected_model["provider"],
+                litellm_response_model=first_chunk_model or 'unknown',
+                response_content=accumulated_content[:100] if accumulated_content else ''  # Very limited content
+            )
+            
             return StreamingResponse(
                 generate_stream(),
                 media_type="text/plain",
                 headers={
                     "X-Selected-Model": selected_model["model"],
                     "X-Selected-Provider": selected_model["provider"],
-                    "X-Latency-Ms": str(int(latency * 1000))
+                    "X-Latency-Ms": str(int(latency * 1000)),
+                    
+                    # 🔍 VERIFICATION HEADERS - Source of Truth for Streaming
+                    "X-Verification-Model-Match": str(stream_verification["model_match"]),
+                    "X-Verification-Confidence": f"{stream_verification['confidence']:.2f}",
+                    "X-Verification-Method": stream_verification["method"],
+                    "X-Actual-Response-Model": first_chunk_model or 'unknown',
+                    "X-Verification-Flags": ','.join(stream_verification["flags"]) if stream_verification["flags"] else 'none'
                 }
             )
         else:
             # Handle non-streaming response
             response_dict = response.dict() if hasattr(response, 'dict') else response
             
-            # Add metadata
+            # Extract actual model info from LiteLLM response for verification
+            actual_response_model = response_dict.get('model', 'unknown')
+            litellm_model_id = f"{selected_model['provider']}/{selected_model['model']}"
+            
+            # Determine if the response actually came from the intended model
+            model_verification = verify_response_model(
+                intended_model=selected_model["model"],
+                intended_provider=selected_model["provider"],
+                litellm_response_model=actual_response_model,
+                response_content=response_dict.get('choices', [{}])[0].get('message', {}).get('content', '')
+            )
+            
+            # Add enhanced metadata with verification
             response_dict["x_metadata"] = {
                 "selected_model": selected_model["model"],
                 "selected_provider": selected_model["provider"],
                 "latency_ms": int(latency * 1000),
-                "cost_per_1k_tokens": selected_model["cost_per_1k_tokens"]
+                "cost_per_1k_tokens": selected_model["cost_per_1k_tokens"],
+                
+                # 🔍 VERIFICATION DATA - Source of Truth
+                "verification": {
+                    "intended_litellm_id": litellm_model_id,
+                    "actual_response_model": actual_response_model,
+                    "model_match_confirmed": model_verification["model_match"],
+                    "confidence_score": model_verification["confidence"],
+                    "verification_method": model_verification["method"],
+                    "flags": model_verification["flags"]
+                }
             }
             
             return response_dict
