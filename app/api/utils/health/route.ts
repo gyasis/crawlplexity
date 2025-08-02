@@ -52,9 +52,9 @@ export async function GET(request: NextRequest) {
             backend: utilsStatus.query_deconstruction.backend
           },
           subprocess: {
-            connected: utilsStatus.subprocess?.connected || false,
-            python_version: utilsStatus.subprocess?.python_version || 'unknown',
-            last_ping: utilsStatus.subprocess?.last_ping || new Date().toISOString()
+            connected: (utilsStatus as any).subprocess?.connected || false,
+            python_version: (utilsStatus as any).subprocess?.python_version || 'unknown',
+            last_ping: (utilsStatus as any).subprocess?.last_ping || new Date().toISOString()
           },
           error: dspyError
         },

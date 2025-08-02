@@ -98,8 +98,7 @@ export async function POST(request: NextRequest) {
                 for (const phaseQuery of phaseQueries) {
                   const searchResponse = await searchOrchestrator.search(phaseQuery, {
                     maxResults: 6,
-                    includeMetadata: true,
-                    filterDuplicates: true
+                    filterResults: true
                   })
 
                   if (searchResponse?.results) {
@@ -116,8 +115,7 @@ export async function POST(request: NextRequest) {
             sendEvent('status', { message: 'Executing enhanced search...' })
             const searchResponse = await searchOrchestrator.search(query, {
               maxResults: 12, // More sources for deep research
-              includeMetadata: true,
-              filterDuplicates: true
+              filterResults: true
             })
 
             if (searchResponse?.results) {
@@ -174,7 +172,7 @@ ${numberedSources}`
             model: research_type === 'comprehensive' ? 'o3' : 'gpt-4.1-mini', // Use 2025 models
             temperature: 0.3,
             max_tokens: 4000,
-            task_type: 'research',
+            task_type: 'search', // Always use 'search' for Deep Research
             strategy: research_type === 'comprehensive' ? 'performance' : 'cost'
           })
 

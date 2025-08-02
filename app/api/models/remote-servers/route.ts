@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       healthStatus,
       discoveredModels,
       customHeaders: body.customHeaders || {},
-      lastHealthCheck: healthStatus !== 'unknown' ? new Date() : undefined
+      lastHealthCheck: healthStatus === 'healthy' || healthStatus === 'unhealthy' ? new Date() : undefined
     }
     
     const savedServer = await saveRemoteServerToStorage(remoteServer)

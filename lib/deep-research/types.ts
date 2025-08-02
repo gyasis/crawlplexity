@@ -132,6 +132,58 @@ export interface ResearchProgress {
   phases_completed: ResearchPhase[];
   errors: ResearchError[];
   warnings: ResearchWarning[];
+  // Enhanced progress tracking
+  phase_details?: PhaseProgress[];
+  current_subtask?: SubtaskProgress;
+  subtasks_completed?: SubtaskProgress[];
+}
+
+export interface PhaseProgress {
+  phase: ResearchPhase;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  progress: number; // 0-100
+  start_time?: Date;
+  end_time?: Date;
+  subtasks: SubtaskProgress[];
+  queries_executed?: QueryExecution[];
+}
+
+export interface SubtaskProgress {
+  subtask_id: string;
+  name: string;
+  description: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  progress: number; // 0-100
+  start_time?: Date;
+  end_time?: Date;
+  estimated_duration?: number; // in seconds
+  phase: ResearchPhase;
+  current_operation?: string;
+  operations?: OperationProgress[];
+}
+
+export interface OperationProgress {
+  operation_id: string;
+  type: 'query_generation' | 'search_execution' | 'content_extraction' | 'analysis' | 'synthesis';
+  description: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  start_time?: Date;
+  end_time?: Date;
+  metadata?: any;
+}
+
+export interface QueryExecution {
+  query_id: string;
+  query_text: string;
+  generated_from?: string; // what prompted this query
+  execution_status: 'pending' | 'executing' | 'completed' | 'failed';
+  start_time?: Date;
+  end_time?: Date;
+  results_count?: number;
+  relevant_results_count?: number;
+  processing_time?: number;
+  phase: ResearchPhase;
+  subtask_id?: string;
 }
 
 export interface ResearchError {
@@ -210,9 +262,14 @@ export interface ExportResponse {
 export interface ResearchStreamEvent {
   type: 'session_started' | 'phase_started' | 'phase_completed' | 'query_executed' | 
         'content_extracted' | 'analysis_generated' | 'session_completed' | 
-        'session_error' | 'progress_update';
+        'session_error' | 'progress_update' | 'subtask_started' | 'subtask_completed' |
+        'operation_started' | 'operation_completed' | 'query_generated' | 'query_started' |
+        'query_completed' | 'detailed_progress_update';
   session_id: string;
   phase?: ResearchPhase;
+  subtask_id?: string;
+  operation_id?: string;
+  query_id?: string;
   data: any;
   timestamp: Date;
 }

@@ -185,8 +185,7 @@ export class ResearchOrchestrator {
         try {
           const searchResponse = await this.searchOrchestrator.search(generatedQuery.query, {
             maxResults: 6, // Same as regular search - get 6 sources per query
-            includeMetadata: true,
-            filterDuplicates: true
+            filterResults: true  // This is the correct option name
           });
 
           const processedResults = await this.processSearchResults(

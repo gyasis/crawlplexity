@@ -64,7 +64,7 @@ export async function GET(
     return NextResponse.json(response);
 
   } catch (error) {
-    console.error(`Error getting session progress for ${params.sessionId}:`, error);
+    console.error(`Error getting session progress:`, error);
     return NextResponse.json(
       { 
         error: 'Failed to get session progress',
@@ -126,7 +126,7 @@ export async function DELETE(
     });
 
   } catch (error) {
-    console.error(`Error cancelling session ${params.sessionId}:`, error);
+    console.error(`Error cancelling session:`, error);
     return NextResponse.json(
       { 
         error: 'Failed to cancel session',
@@ -145,7 +145,7 @@ function calculateSessionProgress(sessionData: any): any {
   const status = data.status;
   const tier = sessionData.tier;
 
-  // Base progress structure
+  // Base progress structure with enhanced tracking
   const baseProgress = {
     current_phase: 'unknown' as any,
     phase_progress: 0,
@@ -154,7 +154,11 @@ function calculateSessionProgress(sessionData: any): any {
     estimated_time_remaining: 0,
     phases_completed: [],
     errors: [],
-    warnings: []
+    warnings: [],
+    // Enhanced progress fields
+    phase_details: generatePhaseDetails(data),
+    current_subtask: data.current_subtask || null,
+    subtasks_completed: data.subtasks_completed || []
   };
 
   switch (status) {
@@ -163,7 +167,8 @@ function calculateSessionProgress(sessionData: any): any {
         ...baseProgress,
         current_phase: 'foundation',
         current_activity: 'Waiting to start research...',
-        estimated_time_remaining: data.estimated_completion_time || 300
+        estimated_time_remaining: data.estimated_completion_time || 300,
+        phase_details: generatePhaseDetails(data, 'pending')
       };
 
     case 'in_progress':
@@ -176,9 +181,12 @@ function calculateSessionProgress(sessionData: any): any {
         current_phase: currentPhase,
         phase_progress: data.phase_progress || 25,
         total_progress: calculateTotalProgress(currentPhase, phasesCompleted),
-        current_activity: data.current_activity || `Processing ${currentPhase} phase...`,
+        current_activity: data.current_activity || generateCurrentActivity(data),
         estimated_time_remaining: data.estimated_time_remaining || 180,
-        phases_completed: phasesCompleted
+        phases_completed: phasesCompleted,
+        phase_details: generatePhaseDetails(data, 'in_progress'),
+        current_subtask: data.current_subtask,
+        subtasks_completed: data.subtasks_completed || []
       };
 
     case 'completed':
@@ -189,7 +197,8 @@ function calculateSessionProgress(sessionData: any): any {
         total_progress: 100,
         current_activity: 'Research completed successfully',
         estimated_time_remaining: 0,
-        phases_completed: ['foundation', 'perspective', 'trend', 'synthesis']
+        phases_completed: ['foundation', 'perspective', 'trend', 'synthesis'],
+        phase_details: generatePhaseDetails(data, 'completed')
       };
 
     case 'failed':
@@ -208,7 +217,8 @@ function calculateSessionProgress(sessionData: any): any {
             timestamp: new Date(),
             resolved: false
           }
-        ]
+        ],
+        phase_details: generatePhaseDetails(data, 'failed')
       };
 
     default:
@@ -243,4 +253,151 @@ function calculateTotalProgress(currentPhase: string, completedPhases: string[])
   }
   
   return Math.min(totalProgress, 100);
+}
+
+/**
+ * Generate detailed phase information with subtasks
+ */
+function generatePhaseDetails(data: any, sessionStatus?: string): any[] {
+  const phases = ['foundation', 'perspective', 'trend', 'synthesis'];
+  const currentPhase = data.current_phase || 'foundation';
+  const completedPhases = data.phases_completed || [];
+  
+  return phases.map(phase => {
+    const isCompleted = completedPhases.includes(phase);
+    const isCurrent = currentPhase === phase;
+    const isPending = phases.indexOf(phase) > phases.indexOf(currentPhase);
+    
+    let status: 'pending' | 'in_progress' | 'completed' | 'failed' = 'pending';
+    if (isCompleted) status = 'completed';
+    else if (isCurrent) status = 'in_progress';
+    else if (sessionStatus === 'failed' && isCurrent) status = 'failed';
+    
+    return {
+      phase: phase as any,
+      status,
+      progress: isCompleted ? 100 : (isCurrent ? (data.phase_progress || 25) : 0),
+      start_time: data[`${phase}_start_time`] ? new Date(data[`${phase}_start_time`]) : undefined,
+      end_time: data[`${phase}_end_time`] ? new Date(data[`${phase}_end_time`]) : undefined,
+      subtasks: generateSubtasks(phase, data, status),
+      queries_executed: data[`${phase}_queries`] || []
+    };
+  });
+}
+
+/**
+ * Generate subtasks for a given phase
+ */
+function generateSubtasks(phase: string, data: any, phaseStatus: string): any[] {
+  const subtasks: Record<string, any[]> = {
+    foundation: [
+      {
+        subtask_id: `${phase}_query_gen`,
+        name: 'Generate Research Questions',
+        description: 'Creating foundational research questions based on the initial query',
+        status: phaseStatus === 'completed' ? 'completed' : (phaseStatus === 'in_progress' ? 'in_progress' : 'pending'),
+        progress: phaseStatus === 'completed' ? 100 : (phaseStatus === 'in_progress' ? 60 : 0),
+        phase: phase as any,
+        current_operation: 'Analyzing query complexity and generating sub-questions'
+      },
+      {
+        subtask_id: `${phase}_search`,
+        name: 'Execute Foundation Searches',
+        description: 'Searching for basic information and core concepts',
+        status: phaseStatus === 'completed' ? 'completed' : (phaseStatus === 'in_progress' ? 'pending' : 'pending'),
+        progress: phaseStatus === 'completed' ? 100 : 0,
+        phase: phase as any,
+        current_operation: 'Processing search results and extracting content'
+      },
+      {
+        subtask_id: `${phase}_analysis`,
+        name: 'Analyze Foundation Content',
+        description: 'Processing and analyzing foundational research content',
+        status: phaseStatus === 'completed' ? 'completed' : 'pending',
+        progress: phaseStatus === 'completed' ? 100 : 0,
+        phase: phase as any,
+        current_operation: 'Extracting key concepts and building knowledge base'
+      }
+    ],
+    perspective: [
+      {
+        subtask_id: `${phase}_query_gen`,
+        name: 'Generate Perspective Queries',
+        description: 'Creating queries to gather different viewpoints and opinions',
+        status: phaseStatus === 'completed' ? 'completed' : (phaseStatus === 'in_progress' ? 'in_progress' : 'pending'),
+        progress: phaseStatus === 'completed' ? 100 : (phaseStatus === 'in_progress' ? 40 : 0),
+        phase: phase as any,
+        current_operation: 'Identifying diverse sources and viewpoints'
+      },
+      {
+        subtask_id: `${phase}_search`,
+        name: 'Gather Multiple Perspectives',
+        description: 'Searching for diverse viewpoints and expert opinions',
+        status: phaseStatus === 'completed' ? 'completed' : 'pending',
+        progress: phaseStatus === 'completed' ? 100 : 0,
+        phase: phase as any,
+        current_operation: 'Processing expert opinions and different perspectives'
+      }
+    ],
+    trend: [
+      {
+        subtask_id: `${phase}_query_gen`,
+        name: 'Generate Trend Queries',
+        description: 'Creating queries to identify current trends and developments',
+        status: phaseStatus === 'completed' ? 'completed' : (phaseStatus === 'in_progress' ? 'in_progress' : 'pending'),
+        progress: phaseStatus === 'completed' ? 100 : (phaseStatus === 'in_progress' ? 30 : 0),
+        phase: phase as any,
+        current_operation: 'Analyzing recent developments and emerging trends'
+      },
+      {
+        subtask_id: `${phase}_search`,
+        name: 'Analyze Current Trends',
+        description: 'Researching latest trends and future directions',
+        status: phaseStatus === 'completed' ? 'completed' : 'pending',
+        progress: phaseStatus === 'completed' ? 100 : 0,
+        phase: phase as any,
+        current_operation: 'Processing recent publications and trend data'
+      }
+    ],
+    synthesis: [
+      {
+        subtask_id: `${phase}_analysis`,
+        name: 'Synthesize Research',
+        description: 'Combining all research into comprehensive analysis',
+        status: phaseStatus === 'completed' ? 'completed' : (phaseStatus === 'in_progress' ? 'in_progress' : 'pending'),
+        progress: phaseStatus === 'completed' ? 100 : (phaseStatus === 'in_progress' ? 70 : 0),
+        phase: phase as any,
+        current_operation: 'Generating comprehensive analysis and recommendations'
+      }
+    ]
+  };
+  
+  return subtasks[phase] || [];
+}
+
+/**
+ * Generate current activity description based on data
+ */
+function generateCurrentActivity(data: any): string {
+  const currentPhase = data.current_phase || 'foundation';
+  const currentSubtask = data.current_subtask;
+  const currentQuery = data.current_query;
+  
+  if (currentQuery) {
+    return `Executing query: "${currentQuery.length > 50 ? currentQuery.substring(0, 50) + '...' : currentQuery}"`;
+  }
+  
+  if (currentSubtask && currentSubtask.current_operation) {
+    return `${currentSubtask.name}: ${currentSubtask.current_operation}`;
+  }
+  
+  // Fallback based on phase
+  const phaseDescriptions = {
+    foundation: 'Gathering foundational knowledge and core concepts',
+    perspective: 'Collecting diverse viewpoints and expert perspectives',
+    trend: 'Analyzing current trends and future developments',
+    synthesis: 'Synthesizing research into comprehensive analysis'
+  };
+  
+  return phaseDescriptions[currentPhase as keyof typeof phaseDescriptions] || `Processing ${currentPhase} phase...`;
 }

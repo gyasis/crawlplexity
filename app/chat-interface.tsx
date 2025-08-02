@@ -18,6 +18,20 @@ interface MessageData {
   ticker?: string
 }
 
+interface ResearchProgress {
+  sessionId: string
+  status: string
+  currentPhase: string
+  phaseProgress: number
+  totalProgress: number
+  currentActivity: string
+  estimatedTimeRemaining: number
+  phasesCompleted: string[]
+  phaseDetails?: any[]
+  currentSubtask?: any
+  subtasksCompleted?: any[]
+}
+
 interface ChatInterfaceProps {
   messages: Message[]
   sources: SearchResult[]
@@ -30,9 +44,10 @@ interface ChatInterfaceProps {
   messageData?: Map<number, MessageData>
   currentTicker?: string | null
   deepResearchStatus?: string | null
+  researchProgress?: ResearchProgress | null
 }
 
-export function ChatInterface({ messages, sources, followUpQuestions, searchStatus, isLoading, input, handleInputChange, handleSubmit, messageData, currentTicker, deepResearchStatus }: ChatInterfaceProps) {
+export function ChatInterface({ messages, sources, followUpQuestions, searchStatus, isLoading, input, handleInputChange, handleSubmit, messageData, currentTicker, deepResearchStatus, researchProgress }: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
@@ -148,8 +163,9 @@ export function ChatInterface({ messages, sources, followUpQuestions, searchStat
         <div className="max-w-4xl mx-auto space-y-6 pb-8">
           {/* Deep Research Status */}
           <DeepResearchStatus 
-            status={deepResearchStatus} 
+            status={deepResearchStatus || null} 
             isActive={isLoading && !!deepResearchStatus} 
+            progress={researchProgress as any}
           />
           
           {/* Previous conversations */}

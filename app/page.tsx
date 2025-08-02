@@ -344,6 +344,7 @@ export default function CrawlplexityPage() {
               messageData={messageData}
               currentTicker={currentTicker}
               deepResearchStatus={deepResearchStatus}
+              researchProgress={researchProgress}
             />
           )}
         </div>

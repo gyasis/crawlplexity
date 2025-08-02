@@ -295,7 +295,9 @@ async function startResearchSession(
       options
     };
 
-    await (memoryMgr || memoryManager).completeResearchSession(sessionId, failedSession);
+    if (memoryManager) {
+      await memoryManager.completeResearchSession(sessionId, failedSession);
+    }
     
     throw error;
   }

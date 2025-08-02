@@ -44,6 +44,58 @@ interface ResearchProgress {
   currentActivity: string
   estimatedTimeRemaining: number
   phasesCompleted: string[]
+  // Enhanced progress tracking
+  phaseDetails?: PhaseProgress[]
+  currentSubtask?: SubtaskProgress
+  subtasksCompleted?: SubtaskProgress[]
+}
+
+interface PhaseProgress {
+  phase: string
+  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  progress: number
+  start_time?: Date
+  end_time?: Date
+  subtasks: SubtaskProgress[]
+  queries_executed?: QueryExecution[]
+}
+
+interface SubtaskProgress {
+  subtask_id: string
+  name: string
+  description: string
+  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  progress: number
+  start_time?: Date
+  end_time?: Date
+  estimated_duration?: number
+  phase: string
+  current_operation?: string
+  operations?: OperationProgress[]
+}
+
+interface OperationProgress {
+  operation_id: string
+  type: 'query_generation' | 'search_execution' | 'content_extraction' | 'analysis' | 'synthesis'
+  description: string
+  status: 'pending' | 'in_progress' | 'completed' | 'failed'
+  start_time?: Date
+  end_time?: Date
+  metadata?: any
+}
+
+interface QueryExecution {
+  query_id: string
+  query_text: string
+  generated_from?: string
+  execution_status: 'pending' | 'executing' | 'completed' | 'failed'
+  start_time?: Date
+  end_time?: Date
+  results_count?: number
+  relevant_results_count?: number
+  processing_time?: number
+  phase: string
+  subtask_id?: string
 }
 
 interface ResearchSessionSummary {
@@ -167,10 +219,48 @@ export function useDeepResearch(): UseDeepResearchReturn {
                     break
 
                   case 'progress_update':
+                  case 'detailed_progress_update':
                     setResearchProgress(prev => prev ? {
                       ...prev,
-                      ...event.data
+                      currentPhase: event.data.current_phase || prev.currentPhase,
+                      phaseProgress: event.data.phase_progress || prev.phaseProgress,
+                      totalProgress: event.data.total_progress || prev.totalProgress,
+                      currentActivity: event.data.current_activity || prev.currentActivity,
+                      estimatedTimeRemaining: event.data.estimated_time_remaining || prev.estimatedTimeRemaining,
+                      phasesCompleted: event.data.phases_completed || prev.phasesCompleted,
+                      phaseDetails: event.data.phase_details || prev.phaseDetails,
+                      currentSubtask: event.data.current_subtask || prev.currentSubtask,
+                      subtasksCompleted: event.data.subtasks_completed || prev.subtasksCompleted
                     } : null)
+                    break
+
+                  case 'subtask_started':
+                    setResearchProgress(prev => prev ? {
+                      ...prev,
+                      currentSubtask: event.data.subtask,
+                      currentActivity: event.data.subtask?.current_operation || prev.currentActivity
+                    } : null)
+                    break
+
+                  case 'subtask_completed':
+                    setResearchProgress(prev => prev ? {
+                      ...prev,
+                      subtasksCompleted: [...(prev.subtasksCompleted || []), event.data.subtask],
+                      currentSubtask: undefined
+                    } : null)
+                    break
+
+                  case 'query_started':
+                  case 'query_completed':
+                    // Update current activity to show query execution
+                    if (event.data.query_text) {
+                      setResearchProgress(prev => prev ? {
+                        ...prev,
+                        currentActivity: event.type === 'query_started' 
+                          ? `Executing query: "${event.data.query_text.substring(0, 50)}${event.data.query_text.length > 50 ? '...' : ''}"`
+                          : prev.currentActivity
+                      } : null)
+                    }
                     break
 
                   case 'session_completed':
@@ -240,7 +330,15 @@ export function useDeepResearch(): UseDeepResearchReturn {
         setResearchProgress({
           sessionId,
           status: data.status,
-          ...data.progress
+          currentPhase: data.progress.current_phase,
+          phaseProgress: data.progress.phase_progress,
+          totalProgress: data.progress.total_progress,
+          currentActivity: data.progress.current_activity,
+          estimatedTimeRemaining: data.progress.estimated_time_remaining,
+          phasesCompleted: data.progress.phases_completed,
+          phaseDetails: data.progress.phase_details,
+          currentSubtask: data.progress.current_subtask,
+          subtasksCompleted: data.progress.subtasks_completed
         })
 
         if (data.status === 'completed' || data.status === 'failed') {
@@ -269,7 +367,15 @@ export function useDeepResearch(): UseDeepResearchReturn {
       setResearchProgress({
         sessionId,
         status: data.status,
-        ...data.progress
+        currentPhase: data.progress.current_phase,
+        phaseProgress: data.progress.phase_progress,
+        totalProgress: data.progress.total_progress,
+        currentActivity: data.progress.current_activity,
+        estimatedTimeRemaining: data.progress.estimated_time_remaining,
+        phasesCompleted: data.progress.phases_completed,
+        phaseDetails: data.progress.phase_details,
+        currentSubtask: data.progress.current_subtask,
+        subtasksCompleted: data.progress.subtasks_completed
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get status')

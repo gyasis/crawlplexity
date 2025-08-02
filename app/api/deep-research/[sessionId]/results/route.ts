@@ -7,27 +7,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { TemporalMemoryManager } from '@/lib/deep-research/temporal-storage';
 import { GetResultsResponse } from '@/lib/deep-research/types';
 
-// Initialize global instance
-let memoryManager: TemporalMemoryManager;
+// Global instances with lazy initialization
+let memoryManager: TemporalMemoryManager | null = null;
 
-if (!memoryManager) {
-  memoryManager = new TemporalMemoryManager({
-    sqlite_path: './data/research_memory.db',
-    tier_durations: {
-      hot_days: 3,
-      warm_days: 7,
-      cold_days: 30,
-      trash_days: 7
-    }
-  });
+async function getMemoryManager(): Promise<TemporalMemoryManager> {
+  if (!memoryManager) {
+    memoryManager = new TemporalMemoryManager({
+      sqlite_path: './data/research_memory.db',
+      tier_durations: {
+        hot_days: 3,
+        warm_days: 7,
+        cold_days: 30,
+        trash_days: 7
+      }
+    });
+    await memoryManager.initialize();
+  }
+  return memoryManager;
 }
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { sessionId: string } }
+  { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
-    const { sessionId } = params;
+    const { sessionId } = await params;
     const { searchParams } = new URL(request.url);
 
     if (!sessionId || sessionId.trim().length === 0) {
@@ -38,7 +42,8 @@ export async function GET(
     }
 
     // Get session data from temporal memory
-    const sessionData = await memoryManager.getResearchSession(sessionId);
+    const mm = await getMemoryManager();
+    const sessionData = await mm.getResearchSession(sessionId);
 
     if (!sessionData) {
       return NextResponse.json(
@@ -169,7 +174,7 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error(`Error getting results for session ${params.sessionId}:`, error);
+    console.error(`Error getting results for session:`, error);
     return NextResponse.json(
       { 
         error: 'Failed to get research results',

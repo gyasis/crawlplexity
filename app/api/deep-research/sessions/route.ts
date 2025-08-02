@@ -6,19 +6,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TemporalMemoryManager } from '@/lib/deep-research/temporal-storage';
 
-// Initialize global instance
-let memoryManager: TemporalMemoryManager;
+// Global instances with lazy initialization
+let memoryManager: TemporalMemoryManager | null = null;
 
-if (!memoryManager) {
-  memoryManager = new TemporalMemoryManager({
-    sqlite_path: './data/research_memory.db',
-    tier_durations: {
-      hot_days: 3,
-      warm_days: 7,
-      cold_days: 30,
-      trash_days: 7
-    }
-  });
+async function getMemoryManager(): Promise<TemporalMemoryManager> {
+  if (!memoryManager) {
+    memoryManager = new TemporalMemoryManager({
+      sqlite_path: './data/research_memory.db',
+      tier_durations: {
+        hot_days: 3,
+        warm_days: 7,
+        cold_days: 30,
+        trash_days: 7
+      }
+    });
+    await memoryManager.initialize();
+  }
+  return memoryManager;
 }
 
 export async function GET(request: NextRequest) {
@@ -36,7 +40,8 @@ export async function GET(request: NextRequest) {
     const includeSummary = searchParams.get('include_summary') === 'true';
 
     // Search sessions across all tiers
-    const allSessions = await memoryManager.searchSessions(userId, query, limit * 3); // Get more to account for filtering
+    const mm = await getMemoryManager();
+    const allSessions = await mm.searchSessions(userId, query || undefined, limit * 3); // Get more to account for filtering
 
     // Filter by status if specified
     let filteredSessions = allSessions;
@@ -86,7 +91,7 @@ export async function GET(request: NextRequest) {
     const hasPrev = page > 1;
 
     // Get memory statistics for additional context
-    const memoryStats = await memoryManager.getMemoryStats();
+    const memoryStats = await mm.getMemoryStats();
 
     const response = {
       sessions: formattedSessions,
@@ -139,7 +144,7 @@ export async function GET(request: NextRequest) {
 function formatSessionSummary(sessionData: any, includeSummary: boolean): any {
   const data = sessionData.data;
   
-  const summary = {
+  const summary: any = {
     session_id: data.session_id,
     query: data.query,
     status: data.status,

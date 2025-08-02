@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { modelName: string } }
+  { params }: { params: Promise<{ modelName: string }> }
 ) {
   try {
-    const modelName = decodeURIComponent(params.modelName)
+    const { modelName: rawModelName } = await params
+    const modelName = decodeURIComponent(rawModelName)
     
     if (!modelName || modelName.trim() === '') {
       return NextResponse.json(

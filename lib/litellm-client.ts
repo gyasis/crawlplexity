@@ -16,7 +16,7 @@ export interface LiteLLMRequest {
   top_p?: number;
   frequency_penalty?: number;
   stream?: boolean;
-  task_type?: 'general' | 'search' | 'summary' | 'followup';
+  task_type?: 'general' | 'search' | 'summary' | 'followup' | 'coding' | 'creative' | 'research';
   strategy?: 'performance' | 'cost' | 'balanced' | 'local';
   debug?: boolean;
   debugCallback?: (event: DebugEvent) => void;
@@ -424,7 +424,7 @@ export class LiteLLMClient {
   /**
    * Select optimal model for a task (convenience method)
    */
-  getOptimalModel(taskType: 'general' | 'search' | 'summary' | 'followup' = 'general'): string | undefined {
+  getOptimalModel(taskType: 'general' | 'search' | 'summary' | 'followup' | 'coding' | 'creative' | 'research' = 'general'): string | undefined {
     // Let LiteLLM service handle model selection
     // Return undefined to use service's auto-selection
     return undefined;

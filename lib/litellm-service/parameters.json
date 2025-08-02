@@ -437,7 +437,7 @@
   "task_type": {
     "type": "string",
     "default": "general",
-    "enum": ["general", "search", "summary", "followup", "coding", "creative"],
+    "enum": ["general", "search", "summary", "followup", "coding", "creative", "research"],
     "description": "Custom task type for model selection optimization",
     "required": false,
     "essential": false,
