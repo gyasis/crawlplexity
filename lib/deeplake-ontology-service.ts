@@ -187,7 +187,7 @@ export class DeepLakeOntologyService {
 
     this.pythonProcess.stdout?.on('data', (data) => {
       try {
-        const messages = data.toString().split('\n').filter(line => line.trim());
+        const messages = data.toString().split('\n').filter((line: string) => line.trim());
         
         for (const messageStr of messages) {
           if (messageStr.trim()) {

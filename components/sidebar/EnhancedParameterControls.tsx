@@ -166,7 +166,7 @@ export function EnhancedParameterControls() {
   React.useEffect(() => {
     if (parameterSchema && Object.keys(parameterStates).length > 0) {
       // We could expose this through the context, but for now just store it
-      window.fireplexityActiveParameters = getActiveParameters()
+      ;(window as any).fireplexityActiveParameters = getActiveParameters()
     }
   }, [parameterStates, parameterSchema])
   

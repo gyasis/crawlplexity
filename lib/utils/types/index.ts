@@ -121,7 +121,12 @@ export interface ModuleStatus {
 export interface UtilsStatus {
   taskmaster: ModuleStatus;
   query_deconstruction: ModuleStatus;
-  pybridge: {
+  pybridge?: {
+    connected: boolean;
+    python_version: string;
+    last_ping: string;
+  };
+  subprocess?: {
     connected: boolean;
     python_version: string;
     last_ping: string;
@@ -181,7 +186,7 @@ export class UtilsError extends Error {
   constructor(
     message: string,
     public code: string,
-    public module: 'taskmaster' | 'query_deconstruction' | 'pybridge',
+    public module: 'taskmaster' | 'query_deconstruction' | 'pybridge' | 'subprocess',
     public details?: any
   ) {
     super(message);

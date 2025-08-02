@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useEffect } from 'react'
-import { Send, Loader2, User, Sparkles, FileText, Plus, Copy, RefreshCw, Check } from 'lucide-react'
+import { Send, Loader2, User, Sparkles, FileText, Plus, Copy, RefreshCw, Check, Microscope } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -45,9 +45,11 @@ interface ChatInterfaceProps {
   currentTicker?: string | null
   deepResearchStatus?: string | null
   researchProgress?: ResearchProgress | null
+  onDeepResearchToggle?: (enabled: boolean) => void
+  deepResearchEnabled?: boolean
 }
 
-export function ChatInterface({ messages, sources, followUpQuestions, searchStatus, isLoading, input, handleInputChange, handleSubmit, messageData, currentTicker, deepResearchStatus, researchProgress }: ChatInterfaceProps) {
+export function ChatInterface({ messages, sources, followUpQuestions, searchStatus, isLoading, input, handleInputChange, handleSubmit, messageData, currentTicker, deepResearchStatus, researchProgress, onDeepResearchToggle, deepResearchEnabled }: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
@@ -194,6 +196,7 @@ export function ChatInterface({ messages, sources, followUpQuestions, searchStat
                     {pair.user && (
                       <div>
                         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">{pair.user.content}</h2>
+                        
                       </div>
                     )}
                     {pair.assistant && (
@@ -657,6 +660,14 @@ export function ChatInterface({ messages, sources, followUpQuestions, searchStat
                     boxShadow: 'none'
                   }}
                 />
+                <button
+                  type="button"
+                  onClick={() => onDeepResearchToggle?.(!deepResearchEnabled)}
+                  className={`bg-transparent hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-500 dark:text-gray-400 rounded-full h-8 w-8 min-h-[32px] min-w-[32px] flex items-center justify-center flex-shrink-0 transition-colors ${deepResearchEnabled ? 'text-purple-500' : ''}`}
+                  title={deepResearchEnabled ? 'Deep Research ON' : 'Deep Research OFF'}
+                >
+                  <Microscope className="h-4 w-4" />
+                </button>
                 <button
                   type="submit"
                   disabled={!input.trim() || isLoading}

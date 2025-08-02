@@ -65,13 +65,7 @@ export default function CrawlplexityPage() {
     cancelResearch
   } = useDeepResearch()
 
-  // Debug logging
-  console.log('Crawlplexity Chat State:', { 
-    messagesCount: messages.length, 
-    sourcesCount: sources.length, 
-    isLoading, 
-    error 
-  })
+  // Chat state tracking
 
   // Clear search status when loading completes
   useEffect(() => {
@@ -146,8 +140,6 @@ export default function CrawlplexityPage() {
         return
       } catch (error) {
         // Handle Deep Research failure - fall back to regular search
-        console.error('Deep Research failed:', error)
-        
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         setDeepResearchError(errorMessage)
         
@@ -345,6 +337,8 @@ export default function CrawlplexityPage() {
               currentTicker={currentTicker}
               deepResearchStatus={deepResearchStatus}
               researchProgress={researchProgress}
+              onDeepResearchToggle={setDeepResearchEnabled}
+              deepResearchEnabled={deepResearchEnabled}
             />
           )}
         </div>

@@ -11,15 +11,12 @@ import { ResearchOrchestrator } from '@/lib/deep-research/orchestrator'
  */
 export async function POST(request: NextRequest) {
   const requestId = Math.random().toString(36).substring(7)
-  console.log(`[${requestId}] Deep Research Search API called`)
   
   try {
     const body = await request.json()
     const messages = body.messages || []
     const query = messages[messages.length - 1]?.content || body.query
     const research_type = body.research_type || 'comprehensive'
-    
-    console.log(`[${requestId}] Deep Research Query: "${query}" (${research_type})`)
 
     if (!query) {
       return NextResponse.json({ error: 'Query is required' }, { status: 400 })
@@ -71,7 +68,6 @@ export async function POST(request: NextRequest) {
             orchestrator = new ResearchOrchestrator(memoryManager)
             sendEvent('status', { message: 'Deep Research Engine initialized...' })
           } catch (error) {
-            console.warn('Deep Research services unavailable, falling back to enhanced search')
             sendEvent('status', { message: 'Using enhanced search mode...' })
           }
 
@@ -92,7 +88,13 @@ export async function POST(request: NextRequest) {
 
               try {
                 // Generate enhanced queries for this phase
-                const phaseQueries = await generatePhaseQueries(query, phase)
+                const phaseQueries = await generatePhaseQueries(query, phase, (eventName, eventData) => {
+                  sendEvent('detailed_progress_update', {
+                    current_phase: phase,
+                    current_activity: eventName,
+                    details: eventData
+                  });
+                });
                 
                 // Execute searches for each query
                 for (const phaseQuery of phaseQueries) {
@@ -106,7 +108,6 @@ export async function POST(request: NextRequest) {
                   }
                 }
               } catch (phaseError) {
-                console.error(`Phase ${phase} failed:`, phaseError)
                 sendEvent('status', { message: `Phase ${phase} completed with partial results...` })
               }
             }
@@ -148,6 +149,9 @@ export async function POST(request: NextRequest) {
             )
             .join('\n\n')
 
+          const isFollowUp = messages.length > 1;
+          const conversationHistory = isFollowUp ? messages.slice(0, -1) : [];
+
           const systemMessage = `You are a comprehensive research assistant. Analyze the provided sources and generate a detailed, well-structured response that synthesizes information from multiple perspectives.
 
 Focus on:
@@ -156,15 +160,15 @@ Focus on:
 - Including relevant details and examples
 - Using proper citations [1], [2], etc. referring to the numbered sources below
 - Structuring the response clearly
-- Do NOT use "Ibid." or similar - use proper numbered citations
+- Do NOT use "Ibid." or similar - use proper numbered citations${isFollowUp ? '\n- This is a follow-up question. Use the conversation history for context.' : ''}
 
 Query: ${query}
 Research Type: ${research_type}
 
 SOURCES:
-${numberedSources}`
+${numberedSources}`;
 
-          const responseMessages = createMessages(systemMessage, query)
+          const responseMessages = createMessages(systemMessage, query, conversationHistory);
           
           // Stream the LLM response using streamCompletion method
           const streamGenerator = litellmClient.streamCompletion({
@@ -190,20 +194,25 @@ ${numberedSources}`
           sendEvent('status', { message: 'Generating related questions...' })
           
           try {
+            const followUpSystemPrompt = `You are an expert in generating insightful follow-up questions based on research. Your goal is to help the user explore the topic more deeply. Generate 3 concise, specific, and thought-provoking questions based on the provided research content. Do not repeat the original query.
+
+- Ensure questions are distinct from each other.
+- Frame them as natural-language questions a curious person would ask.
+- If the content is insufficient, generate general questions about the topic.`
+
+            const followUpUserPrompt = `Original Query: "${query}"
+
+Research Content Summary:
+${allContent.substring(0, 3000)}...
+
+Based on the research, generate 3 follow-up questions.`
+
             const followUpResponse = await litellmClient.completion({
-              messages: [
-                {
-                  role: 'system',
-                  content: 'Generate 3 relevant follow-up questions based on the user query and research findings. Make them specific and interesting.'
-                },
-                {
-                  role: 'user',
-                  content: `Based on the deep research about "${query}", generate 3 follow-up questions that would be interesting to explore further. Consider the different aspects covered in the research.`
-                }
-              ],
+              messages: createMessages(followUpSystemPrompt, followUpUserPrompt),
               model: 'gpt-4.1-mini',
-              temperature: 0.7,
-              max_tokens: 200
+              temperature: 0.8,
+              max_tokens: 250,
+              strategy: 'cost'
             })
 
             const followUpContent = followUpResponse.choices[0]?.message?.content || ''
@@ -218,7 +227,7 @@ ${numberedSources}`
               sendEvent('suggestions', { suggestions: followUpQuestions })
             }
           } catch (followUpError) {
-            console.warn('Failed to generate follow-up questions:', followUpError)
+            // Follow-up generation failed silently
           }
 
           // Step 8: Send completion event
@@ -229,7 +238,6 @@ ${numberedSources}`
           })
 
         } catch (error) {
-          console.error(`Deep Research stream error [${requestId}]:`, error)
           if (!streamClosed) {
             sendEvent('error', { 
               error: 'Deep Research failed', 
@@ -255,7 +263,6 @@ ${numberedSources}`
     })
 
   } catch (error) {
-    console.error(`Deep Research API error [${requestId}]:`, error)
     return NextResponse.json({ 
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
@@ -291,7 +298,7 @@ function getPhaseDescription(phase: string): string {
   return descriptions[phase as keyof typeof descriptions] || phase
 }
 
-async function generatePhaseQueries(query: string, phase: string): Promise<string[]> {
+async function generatePhaseQueries(query: string, phase: string, emitEvent?: (eventName: string, eventData: any) => void): Promise<string[]> {
   const phaseModifiers = {
     foundation: ['overview', 'introduction', 'basics', 'fundamentals'],
     perspective: ['pros and cons', 'arguments', 'debate', 'opinions', 'viewpoints'],
@@ -299,8 +306,11 @@ async function generatePhaseQueries(query: string, phase: string): Promise<strin
     synthesis: ['analysis', 'expert view', 'comprehensive', 'evaluation']
   }
 
+  emitEvent?.('query_generation_started', { phase });
   const modifiers = phaseModifiers[phase as keyof typeof phaseModifiers] || ['overview']
-  return modifiers.map(modifier => `${query} ${modifier}`)
+  const queries = modifiers.map(modifier => `${query} ${modifier}`);
+  emitEvent?.('query_generation_completed', { phase, query_count: queries.length });
+  return queries;
 }
 
 function removeDuplicateSources(sources: any[]): any[] {

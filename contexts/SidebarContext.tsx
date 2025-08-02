@@ -16,6 +16,8 @@ export interface ModelInfo {
   cost_per_1k_tokens: number
   task_types: string[]
   max_tokens: number
+  category?: 'local' | 'remote' | 'custom'
+  remoteServerId?: string
 }
 
 export interface LLMParameters {

@@ -8,6 +8,8 @@ export interface SerperSearchResult {
   link: string;
   snippet: string;
   date?: string;
+  image?: string;
+  favicon?: string;
   sitelinks?: Array<{
     title: string;
     link: string;

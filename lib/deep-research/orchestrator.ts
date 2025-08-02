@@ -32,9 +32,7 @@ export class ResearchOrchestrator {
     // Try to load Utils integration with graceful fallback
     try {
       this.utilsIntegration = getDeepResearchIntegration();
-      console.log('✅ Utils/DSPy integration loaded successfully');
     } catch (error) {
-      console.warn('⚠️ Utils/DSPy service unavailable - using fallback query generation:', error.message);
       this.utilsIntegration = null;
     }
   }
@@ -212,8 +210,6 @@ export class ResearchOrchestrator {
           });
 
         } catch (searchError) {
-          console.error(`Search failed for query "${generatedQuery.query}":`, searchError);
-          
           emitEvent?.('query_execution_failed', {
             phase,
             query: generatedQuery.query,
@@ -247,7 +243,6 @@ export class ResearchOrchestrator {
       return searchPass;
 
     } catch (error) {
-      console.error(`Phase ${phase} execution failed:`, error);
       throw error;
     }
   }
@@ -283,8 +278,6 @@ export class ResearchOrchestrator {
       return await this.generateQueriesWithLLM(originalQuery, phase, previousResults);
 
     } catch (error) {
-      console.error(`Query generation failed for phase ${phase}:`, error);
-      
       // Ultimate fallback: use original query with phase-specific modifiers
       return this.getFallbackQueries(originalQuery, phase);
     }
@@ -463,7 +456,6 @@ Return only the queries, one per line.`
         processedResults.push(researchResult);
 
       } catch (error) {
-        console.error(`Failed to process search result ${result.url}:`, error);
         emitEvent?.('content_extraction_failed', {
           phase,
           url: result.url,
@@ -480,8 +472,6 @@ Return only the queries, one per line.`
       hit_ratio: cacheHits / (cacheHits + cacheMisses),
       total_processed: processedResults.length
     });
-
-    console.log(`🎯 Cache Performance - Phase ${phase}: ${cacheHits} hits, ${cacheMisses} misses (${Math.round(cacheHits / (cacheHits + cacheMisses) * 100)}% hit rate)`);
 
     return processedResults;
   }
@@ -544,7 +534,6 @@ Return only the queries, one per line.`
       return analysis;
 
     } catch (error) {
-      console.error(`Synthesis failed for session ${sessionId}:`, error);
       throw error;
     }
   }

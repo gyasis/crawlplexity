@@ -393,7 +393,9 @@ export function AdvancedParameterModal({
                                           )}
                                           
                                           {!config.can_deactivate && (
-                                            <AlertCircle className="w-4 h-4 text-orange-500" title="Cannot be deactivated" />
+                                            <div title="Cannot be deactivated">
+                                              <AlertCircle className="w-4 h-4 text-orange-500" />
+                                            </div>
                                           )}
                                         </div>
                                         

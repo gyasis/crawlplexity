@@ -32,8 +32,8 @@ export interface TieredData {
 }
 
 export class TemporalMemoryManager {
-  private redis: RedisClientType;
-  private db: Database.Database;
+  private redis!: RedisClientType;
+  private db!: Database.Database;
   private config: TemporalConfig;
   private cleanupInterval?: NodeJS.Timeout;
 
@@ -64,9 +64,7 @@ export class TemporalMemoryManager {
       this.initializeSchema();
       this.startCleanupProcess();
       this.initialized = true;
-      console.log('✅ TemporalMemoryManager initialized successfully');
     } catch (error) {
-      console.error('❌ TemporalMemoryManager initialization failed:', error);
       throw error;
     }
   }
@@ -88,16 +86,13 @@ export class TemporalMemoryManager {
       const dbDir = path.dirname(this.config.sqlite_path);
       if (!fs.existsSync(dbDir)) {
         fs.mkdirSync(dbDir, { recursive: true });
-        console.log(`Created database directory: ${dbDir}`);
       }
 
       this.db = new Database(this.config.sqlite_path);
       this.db.pragma('journal_mode = WAL'); // Better concurrent performance
       this.db.pragma('synchronous = NORMAL');
       this.db.pragma('cache_size = 10000');
-      console.log(`SQLite database initialized: ${this.config.sqlite_path}`);
     } catch (error) {
-      console.error('SQLite initialization failed:', error);
       throw new Error('DATABASE_UNAVAILABLE');
     }
   }
@@ -235,24 +230,6 @@ export class TemporalMemoryManager {
     }
   }
 
-  /**
-   * Store active research session in Redis
-   */
-  async storeActiveSession(sessionId: string, sessionData: any): Promise<void> {
-    this.ensureInitialized();
-    const key = `research:active:${sessionId}`;
-    const data = {
-      ...sessionData,
-      created_at: new Date().toISOString(),
-      last_accessed: new Date().toISOString(),
-      tier: 'redis'
-    };
-
-    await this.redis.setEx(key, 3600, JSON.stringify(data)); // 1 hour TTL
-    
-    // Track active session count
-    await this.redis.sAdd('research:active_sessions', sessionId);
-  }
 
   /**
    * Complete research session - move from Redis to Hot tier
@@ -325,7 +302,7 @@ export class TemporalMemoryManager {
    */
   private async storeInTier(tier: StorageTier, sessionId: string, data: any): Promise<void> {
     if (tier === 'redis') {
-      return this.storeActiveSession(sessionId, data);
+      return this.storeActiveSession(sessionId, data, 1); // 1 hour TTL
     }
 
     const tableName = `research_sessions_${tier}`;
@@ -476,8 +453,6 @@ export class TemporalMemoryManager {
    * Perform tier aging and cleanup
    */
   private async performCleanup(): Promise<void> {
-    console.log('🧠 Starting temporal memory cleanup...');
-
     try {
       // 1. Age hot -> warm (data older than hot_days)
       await this.ageTier('hot', 'warm', this.config.tier_durations.hot_days);
@@ -494,9 +469,9 @@ export class TemporalMemoryManager {
       // 5. Clean expired Redis sessions
       await this.cleanExpiredRedisSessions();
 
-      console.log('✅ Temporal memory cleanup completed');
+      // Cleanup completed
     } catch (error) {
-      console.error('❌ Error during temporal memory cleanup:', error);
+      // Cleanup failed silently
     }
   }
 
@@ -517,8 +492,6 @@ export class TemporalMemoryManager {
     const sessionsToAge = selectStmt.all() as any[];
 
     if (sessionsToAge.length === 0) return;
-
-    console.log(`📦 Aging ${sessionsToAge.length} sessions from ${fromTier} to ${toTier}`);
 
     // Begin transaction
     const transaction = this.db.transaction(() => {
@@ -566,9 +539,6 @@ export class TemporalMemoryManager {
     `);
 
     const deletedCount = stmt.run().changes;
-    if (deletedCount > 0) {
-      console.log(`🗑️ Permanently deleted ${deletedCount} old research sessions`);
-    }
   }
 
   /**
@@ -586,9 +556,7 @@ export class TemporalMemoryManager {
       }
     }
 
-    if (cleanedCount > 0) {
-      console.log(`🧹 Cleaned ${cleanedCount} expired Redis session references`);
-    }
+    // Cleaned expired session references
   }
 
   /**
@@ -598,7 +566,7 @@ export class TemporalMemoryManager {
     const stats = {
       redis: {
         active_sessions: await this.redis.sCard('research:active_sessions'),
-        memory_usage: await this.redis.memory('usage') || 0
+        memory_usage: 0 // Redis memory API not available in this client version
       },
       hot: this.db.prepare('SELECT COUNT(*) as count FROM research_sessions_hot').get(),
       warm: this.db.prepare('SELECT COUNT(*) as count FROM research_sessions_warm').get(),
@@ -677,13 +645,11 @@ export class TemporalMemoryManager {
       
       const cachedData = await this.redis.get(cacheKey);
       if (cachedData) {
-        console.log(`🎯 Redis cache HIT for URL: ${url.substring(0, 60)}...`);
         return JSON.parse(cachedData);
       }
       
       return null;
     } catch (error) {
-      console.error('Redis cache lookup failed:', error);
       return null;
     }
   }
@@ -699,10 +665,9 @@ export class TemporalMemoryManager {
       const cacheKey = `crawl:content:${urlHash}`;
       const ttlSeconds = ttlHours * 3600;
       
-      await this.redis.setex(cacheKey, ttlSeconds, JSON.stringify(content));
-      console.log(`💾 Cached content for URL: ${url.substring(0, 60)}... (TTL: ${ttlHours}h)`);
+      await this.redis.setEx(cacheKey, ttlSeconds, JSON.stringify(content));
     } catch (error) {
-      console.error('Failed to cache content:', error);
+      // Caching failed silently
     }
   }
 
@@ -729,19 +694,17 @@ export class TemporalMemoryManager {
         const result = results?.[index];
         let content = null;
         
-        if (result && result[1]) {
+        if (result && Array.isArray(result) && result[1]) {
           try {
             content = JSON.parse(result[1] as string);
-            console.log(`🎯 Pipeline cache HIT for: ${url.substring(0, 40)}...`);
           } catch (e) {
-            console.warn('Failed to parse cached content for:', url);
+            // Failed to parse cached content
           }
         }
         
         return { url, content };
       });
     } catch (error) {
-      console.error('Pipeline cache lookup failed:', error);
       return urls.map(url => ({ url, content: null }));
     }
   }
@@ -756,10 +719,9 @@ export class TemporalMemoryManager {
       const cacheKey = `session:active:${sessionId}`;
       const ttlSeconds = ttlHours * 3600;
       
-      await this.redis.setex(cacheKey, ttlSeconds, JSON.stringify(sessionData));
-      console.log(`🔄 Stored active session in Redis: ${sessionId} (TTL: ${ttlHours}h)`);
+      await this.redis.setEx(cacheKey, ttlSeconds, JSON.stringify(sessionData));
     } catch (error) {
-      console.error('Failed to store active session:', error);
+      // Failed to store session
     }
   }
 
@@ -779,7 +741,6 @@ export class TemporalMemoryManager {
       
       return null;
     } catch (error) {
-      console.error('Failed to get active session:', error);
       return null;
     }
   }
@@ -798,9 +759,9 @@ export class TemporalMemoryManager {
       const activeKey = `session:active:${sessionId}`;
       await this.redis.del(activeKey);
       
-      console.log(`📚 Archived session ${sessionId}: Redis → SQLite`);
+      // Session archived successfully
     } catch (error) {
-      console.error('Failed to archive session:', error);
+      // Archive failed
     }
   }
 
@@ -839,7 +800,6 @@ export class TemporalMemoryManager {
         hit_ratio_estimate: hitRatio
       };
     } catch (error) {
-      console.error('Failed to get cache stats:', error);
       return {
         redis_keys: 0,
         cached_contents: 0,
