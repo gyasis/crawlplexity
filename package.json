@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack --port 18563",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "jest",
+    "test:smalltalk": "node tests/integration/test-smalltalk-integration.js"
   },
   "dependencies": {
     "@deepkit/type": "^1.0.15",
