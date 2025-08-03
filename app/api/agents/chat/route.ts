@@ -1,39 +1,101 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAgentService } from '@/lib/agent-service';
 
-// POST /api/agents/chat - Process chat message with agent orchestration
+// POST /api/agents/chat - Process chat message with agent orchestration (streaming)
 export async function POST(request: NextRequest) {
   try {
-    const { message, sessionId, userId } = await request.json();
+    const { messages, query, agentId, sessionId, userId, parameters, debugMode } = await request.json();
     
-    if (!message) {
+    if (!query) {
       return NextResponse.json(
         { 
           success: false, 
-          error: 'Message is required' 
+          error: 'Query is required' 
         },
         { status: 400 }
       );
     }
 
     const agentService = getAgentService();
-    
-    // Initialize if not already done
     await agentService.initialize();
-    
-    // Process the message using SmallTalk's orchestration
-    const response = await agentService.chat(message, sessionId, userId);
-    
-    return NextResponse.json({
-      success: true,
-      data: {
-        response,
-        sessionId: sessionId || 'default',
-        timestamp: new Date().toISOString()
+
+    // Set up Server-Sent Events stream
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // Send initial status
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'status',
+            message: 'Initializing agent orchestration...'
+          })}\n\n`))
+
+          // Check if specific agent requested or use orchestration
+          if (agentId) {
+            // Direct agent communication
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              type: 'status',
+              message: `Routing to agent: ${agentId}`
+            })}\n\n`))
+
+            const response = await agentService.chatWithAgent(agentId, query, sessionId, userId)
+            
+            // Stream the response
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              type: 'content',
+              content: response
+            })}\n\n`))
+          } else {
+            // Agent orchestration - let SmallTalk decide which agent(s) to use
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              type: 'status',
+              message: 'Analyzing task for optimal agent selection...'
+            })}\n\n`))
+
+            // Use SmallTalk's orchestration capabilities
+            const response = await agentService.chat(query, sessionId, userId)
+            
+            // Stream the orchestrated response
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              type: 'content',
+              content: response
+            })}\n\n`))
+          }
+
+          // Get agent status for follow-up
+          const agentList = await agentService.getAgentList()
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'agents_status',
+            agents: agentList
+          })}\n\n`))
+
+          // Send completion
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'complete'
+          })}\n\n`))
+
+        } catch (error) {
+          console.error('Agent chat error:', error)
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+            type: 'error',
+            message: error instanceof Error ? error.message : 'Unknown error occurred'
+          })}\n\n`))
+        } finally {
+          controller.close()
+        }
       }
-    });
+    })
+
+    return new NextResponse(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    })
+
   } catch (error) {
-    console.error('[API] Agent chat failed:', error);
+    console.error('[API] Agent chat route error:', error);
     return NextResponse.json(
       { 
         success: false, 

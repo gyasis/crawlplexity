@@ -22,7 +22,7 @@ export function useCrawlplexityChat() {
 
   const generateId = () => Math.random().toString(36).substring(7)
 
-  const append = useCallback(async (message: Omit<Message, 'id'>, options?: { deepResearch?: boolean, researchType?: string }) => {
+  const append = useCallback(async (message: Omit<Message, 'id'>, options?: { deepResearch?: boolean, researchType?: string, useAgents?: boolean, agentId?: string }) => {
     const newMessage: Message = {
       ...message,
       id: generateId(),
@@ -86,15 +86,22 @@ export function useCrawlplexityChat() {
         model: selectedModelInfo.id, // 🔧 FIXED: No more defaulting!
         modelInfo: selectedModelInfo, // Include full model info for API
         parameters: parametersToSend, // Pass enhanced or legacy parameters
-        debugMode: debugMode // Pass debug mode state
+        debugMode: debugMode, // Pass debug mode state
+        ...(options?.useAgents && { agentId: options.agentId }), // Include agentId for agent mode
+        ...(options?.useAgents && { sessionId: 'default', userId: 'user' }) // Default session/user for agents
       }
       
       // DEBUG: Log debug mode from context and request body
       console.log('🐛 debugMode from useSidebar():', debugMode, typeof debugMode)
       console.log('🚀 FRONTEND REQUEST BODY:', JSON.stringify(requestBody, null, 2))
 
-      // Choose endpoint based on Deep Research mode
-      const endpoint = options?.deepResearch ? '/api/deep-research/search' : '/api/crawlplexity/search'
+      // Choose endpoint based on mode
+      let endpoint = '/api/crawlplexity/search'
+      if (options?.useAgents) {
+        endpoint = '/api/agents/chat'
+      } else if (options?.deepResearch) {
+        endpoint = '/api/deep-research/search'
+      }
       
       // Make POST request to start streaming
       const response = await fetch(endpoint, {
@@ -246,6 +253,12 @@ export function useCrawlplexityChat() {
                   }
                   addDebugLog(debugLogEntry)
                   console.log('🐛 Added debug log entry:', debugLogEntry)
+                  break
+                  
+                case 'agents_status':
+                  // Handle agent status updates from SmallTalk orchestration
+                  console.log('🤖 Agent status update:', event.agents)
+                  // You could update agent status in sidebar context here if needed
                   break
                   
                 default:

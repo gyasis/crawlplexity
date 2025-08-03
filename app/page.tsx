@@ -33,6 +33,8 @@ export default function CrawlplexityPage() {
   const [deepResearchError, setDeepResearchError] = useState<string>('')
   const [deepResearchDetails, setDeepResearchDetails] = useState<string[]>([])
   const [showModelStatus, setShowModelStatus] = useState(false)
+  const [agentModeEnabled, setAgentModeEnabled] = useState(false)
+  const [selectedAgentId, setSelectedAgentId] = useState<string | undefined>(undefined)
   
   // Sidebar context
   const { sidebarState } = useSidebar()
@@ -157,6 +159,21 @@ export default function CrawlplexityPage() {
       }
     }
 
+    // Check if agent mode is enabled
+    if (agentModeEnabled) {
+      setSearchStatus('Starting agent orchestration...')
+      toast.info('🤖 Using SmallTalk agent orchestration')
+      setShowModelStatus(true) // Show model status during search
+      await append({
+        role: 'user',
+        content: query
+      }, { 
+        useAgents: true, 
+        agentId: selectedAgentId 
+      })
+      return
+    }
+
     // Regular search
     setSearchStatus('Starting search...')
     setShowModelStatus(true) // Show model status during search
@@ -212,9 +229,36 @@ export default function CrawlplexityPage() {
         }, { deepResearch: true, researchType: 'trend' })
         break
 
+      case '/agents':
+        if (!args.trim()) {
+          toast.info('🤖 Agent mode enabled - SmallTalk will orchestrate agent selection')
+          setAgentModeEnabled(true)
+          return
+        }
+        toast.info('🤖 Using SmallTalk agent orchestration')
+        setShowModelStatus(true)
+        await append({
+          role: 'user',
+          content: args
+        }, { useAgents: true })
+        break
+
+      case '/agent':
+        const [agentId, ...agentQuery] = args.split(' ')
+        if (!agentId || !agentQuery.length) {
+          toast.error('Usage: /agent [agent-id] [your question]')
+          return
+        }
+        toast.info(`🤖 Routing to agent: ${agentId}`)
+        setShowModelStatus(true)
+        await append({
+          role: 'user',
+          content: agentQuery.join(' ')
+        }, { useAgents: true, agentId })
+        break
 
       default:
-        toast.error(`Unknown command: ${cmd}\n\nAvailable commands:\n/research, /research-quick, /research-trends`)
+        toast.error(`Unknown command: ${cmd}\n\nAvailable commands:\n/research, /research-quick, /research-trends, /agents, /agent`)
         break
     }
   }
@@ -322,6 +366,8 @@ export default function CrawlplexityPage() {
               isLoading={isLoading || isResearching}
               onDeepResearchToggle={setDeepResearchEnabled}
               deepResearchEnabled={deepResearchEnabled}
+              onAgentModeToggle={setAgentModeEnabled}
+              agentModeEnabled={agentModeEnabled}
             />
           ) : (
             <ChatInterface 

@@ -1,6 +1,6 @@
 'use client'
 
-import { Search, Loader2, Microscope } from 'lucide-react'
+import { Search, Loader2, Microscope, Bot } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
@@ -12,6 +12,8 @@ interface SearchComponentProps {
   isLoading: boolean
   onDeepResearchToggle?: (enabled: boolean) => void
   deepResearchEnabled?: boolean
+  onAgentModeToggle?: (enabled: boolean) => void
+  agentModeEnabled?: boolean
 }
 
 export function SearchComponent({ 
@@ -20,14 +22,23 @@ export function SearchComponent({
   handleInputChange, 
   isLoading,
   onDeepResearchToggle,
-  deepResearchEnabled = false
+  deepResearchEnabled = false,
+  onAgentModeToggle,
+  agentModeEnabled = false
 }: SearchComponentProps) {
   const [localDeepResearch, setLocalDeepResearch] = useState(deepResearchEnabled)
+  const [localAgentMode, setLocalAgentMode] = useState(agentModeEnabled)
 
   const handleToggle = () => {
     const newValue = !localDeepResearch
     setLocalDeepResearch(newValue)
     onDeepResearchToggle?.(newValue)
+  }
+
+  const handleAgentToggle = () => {
+    const newValue = !localAgentMode
+    setLocalAgentMode(newValue)
+    onAgentModeToggle?.(newValue)
   }
 
   return (
@@ -57,28 +68,43 @@ export function SearchComponent({
         </div>
       </form>
       
-      {/* Deep Research Toggle */}
-      <div className="mt-3 flex items-center justify-center gap-2">
-        <button
-          type="button"
-          onClick={handleToggle}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-            localDeepResearch 
-              ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700' 
-              : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-700'
-          }`}
-        >
-          <Microscope className="h-4 w-4" />
-          <span>Deep Research {localDeepResearch ? 'ON' : 'OFF'}</span>
-        </button>
-        <span className="text-xs text-gray-500 dark:text-gray-400">
-          {localDeepResearch ? '4-phase comprehensive analysis' : 'Regular search'}
-        </span>
+      {/* Search Mode Toggles */}
+      <div className="mt-3 flex flex-col items-center gap-2">
+        <div className="flex items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={handleToggle}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+              localDeepResearch 
+                ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700' 
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-700'
+            }`}
+          >
+            <Microscope className="h-4 w-4" />
+            <span>Deep Research {localDeepResearch ? 'ON' : 'OFF'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleAgentToggle}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+              localAgentMode 
+                ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border border-orange-300 dark:border-orange-700' 
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-700'
+            }`}
+          >
+            <Bot className="h-4 w-4" />
+            <span>Agent Mode {localAgentMode ? 'ON' : 'OFF'}</span>
+          </button>
+        </div>
+        <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
+          {localDeepResearch ? '4-phase comprehensive analysis' : 
+           localAgentMode ? 'SmallTalk agent orchestration' : 'Regular search'}
+        </div>
       </div>
       
       {/* Slash Commands Help */}
       <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
-        Commands: /research, /research-quick, /research-trends
+        Commands: /research, /research-quick, /research-trends, /agents, /agent
       </div>
     </div>
   )

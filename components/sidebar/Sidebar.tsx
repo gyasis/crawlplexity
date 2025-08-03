@@ -10,17 +10,20 @@ import {
   Cpu, 
   Sliders,
   Bug,
+  Bot,
   ChevronDown
 } from 'lucide-react'
 import { ModelSelector } from './ModelSelector'
 import { EnhancedParameterControls } from './EnhancedParameterControls'
 import { DebugToggle } from './DebugToggle'
 import { SettingsSection } from './SettingsSection'
+import { AgentManagement } from './AgentManagement'
 
 export function Sidebar() {
   const { sidebarState, setSidebarState } = useSidebar()
   const [modelSelectorOpen, setModelSelectorOpen] = useState(true)
   const [parametersOpen, setParametersOpen] = useState(true)
+  const [agentsOpen, setAgentsOpen] = useState(true)
   const [debugOpen, setDebugOpen] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(true)
   
@@ -127,6 +130,25 @@ export function Sidebar() {
                   </div>
                 )}
                 {((isExpanded && parametersOpen) || isSemiCollapsed) && !isCollapsed && <EnhancedParameterControls />}
+              </div>
+              
+              {/* Agents */}
+              <div className="space-y-2">
+                {isExpanded && (
+                  <div 
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setAgentsOpen(!agentsOpen)}
+                  >
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <Bot className="w-4 h-4" />
+                      <span>Agents</span>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform ${agentsOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                )}
+                {((isExpanded && agentsOpen) || isSemiCollapsed) && !isCollapsed && (
+                  <AgentManagement isExpanded={isExpanded} isSemiCollapsed={isSemiCollapsed} />
+                )}
               </div>
               
               {/* Debug Mode */}
