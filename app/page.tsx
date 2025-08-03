@@ -36,6 +36,13 @@ export default function CrawlplexityPage() {
   const [agentModeEnabled, setAgentModeEnabled] = useState(false)
   const [selectedAgentId, setSelectedAgentId] = useState<string | undefined>(undefined)
   
+  // Seamless mode switching state
+  const [currentChatMode, setCurrentChatMode] = useState<'search' | 'deep-research' | 'agents' | 'agent-groups'>('search')
+  const [activeAgents, setActiveAgents] = useState<any[]>([])
+  const [activeGroups, setActiveGroups] = useState<any[]>([])
+  const [availableAgents, setAvailableAgents] = useState<any[]>([])
+  const [availableGroups, setAvailableGroups] = useState<any[]>([])
+  
   // Sidebar context
   const { sidebarState } = useSidebar()
 
@@ -66,6 +73,31 @@ export default function CrawlplexityPage() {
     listResearchSessions,
     cancelResearch
   } = useDeepResearch()
+
+  // Load available agents and groups
+  useEffect(() => {
+    const loadAgentsAndGroups = async () => {
+      try {
+        // Load agents
+        const agentsResponse = await fetch('/api/agents')
+        if (agentsResponse.ok) {
+          const agentsData = await agentsResponse.json()
+          setAvailableAgents(agentsData.data || [])
+        }
+
+        // Load groups
+        const groupsResponse = await fetch('/api/agent-groups')
+        if (groupsResponse.ok) {
+          const groupsData = await groupsResponse.json()
+          setAvailableGroups(groupsData.data || [])
+        }
+      } catch (error) {
+        console.error('Failed to load agents/groups:', error)
+      }
+    }
+
+    loadAgentsAndGroups()
+  }, [])
 
   // Chat state tracking
 
@@ -124,63 +156,82 @@ export default function CrawlplexityPage() {
       return
     }
 
-    // Check if deep research is enabled
-    if (deepResearchEnabled) {
-      setSearchStatus('Starting deep research...')
-      toast.info('🔬 Starting Deep Research - enhanced multi-phase analysis')
-      
-      try {
-        // Use the enhanced Deep Research that outputs like regular search
-        setShowModelStatus(true) // Show model status during research
+    // Handle different modes based on currentChatMode
+    switch (currentChatMode) {
+      case 'deep-research':
+        setSearchStatus('Starting deep research...')
+        toast.info('🔬 Starting Deep Research - enhanced multi-phase analysis')
+        
+        try {
+          setShowModelStatus(true)
+          await append({
+            role: 'user',
+            content: query
+          }, { 
+            deepResearch: true, 
+            researchType: 'comprehensive' 
+          })
+          return
+        } catch (error) {
+          // Handle Deep Research failure - fall back to regular search
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          setDeepResearchError(errorMessage)
+          
+          if (errorMessage.includes('Setup required:')) {
+            const instructions = errorMessage.split('Setup required:')[1]?.split('\n').filter(line => line.trim())
+            setDeepResearchDetails(instructions || [])
+          }
+          
+          setShowDeepResearchFallback(true)
+          toast.error('Deep Research unavailable - falling back to regular search')
+          setCurrentChatMode('search')
+        }
+        break
+
+      case 'agents':
+        setSearchStatus('Starting agent orchestration...')
+        if (activeAgents.length === 1) {
+          toast.info(`🤖 Using agent: ${activeAgents[0].name}`)
+        } else if (activeAgents.length > 1) {
+          toast.info(`🤖 Using ${activeAgents.length} agents with orchestration`)
+        } else {
+          toast.info('🤖 Using SmallTalk agent orchestration')
+        }
+        setShowModelStatus(true)
         await append({
           role: 'user',
           content: query
         }, { 
-          deepResearch: true, 
-          researchType: 'comprehensive' 
+          useAgents: true, 
+          agentId: activeAgents.length === 1 ? activeAgents[0].agent_id : undefined
         })
         return
-      } catch (error) {
-        // Handle Deep Research failure - fall back to regular search
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-        setDeepResearchError(errorMessage)
-        
-        // Extract setup instructions if available
-        if (errorMessage.includes('Setup required:')) {
-          const instructions = errorMessage.split('Setup required:')[1]?.split('\n').filter(line => line.trim())
-          setDeepResearchDetails(instructions || [])
-        }
-        
-        setShowDeepResearchFallback(true)
-        toast.error('Deep Research unavailable - falling back to regular search')
-        
-        // Continue with regular search
-        setDeepResearchEnabled(false)
-      }
-    }
 
-    // Check if agent mode is enabled
-    if (agentModeEnabled) {
-      setSearchStatus('Starting agent orchestration...')
-      toast.info('🤖 Using SmallTalk agent orchestration')
-      setShowModelStatus(true) // Show model status during search
-      await append({
-        role: 'user',
-        content: query
-      }, { 
-        useAgents: true, 
-        agentId: selectedAgentId 
-      })
-      return
-    }
+      case 'agent-groups':
+        setSearchStatus('Starting agent group collaboration...')
+        const groupNames = activeGroups.map(g => g.name).join(', ')
+        toast.info(`🤖 Using agent groups: ${groupNames}`)
+        setShowModelStatus(true)
+        await append({
+          role: 'user',
+          content: query
+        }, { 
+          useAgents: true,
+          groupId: activeGroups[0]?.id
+        })
+        return
 
-    // Regular search
-    setSearchStatus('Starting search...')
-    setShowModelStatus(true) // Show model status during search
-    await append({
-      role: 'user',
-      content: query
-    })
+      case 'search':
+      default:
+        // Regular search
+        setSearchStatus('Starting search...')
+        setShowModelStatus(true)
+        await append({
+          role: 'user',
+          content: query
+        })
+        break
+    }
   }
 
   // Handle slash commands
@@ -260,6 +311,59 @@ export default function CrawlplexityPage() {
       default:
         toast.error(`Unknown command: ${cmd}\n\nAvailable commands:\n/research, /research-quick, /research-trends, /agents, /agent`)
         break
+    }
+  }
+
+  // Seamless mode switching handlers
+  const handleAddAgent = (agent: any) => {
+    if (!activeAgents.find(a => a.agent_id === agent.agent_id)) {
+      const newActiveAgents = [...activeAgents, agent]
+      setActiveAgents(newActiveAgents)
+      setCurrentChatMode('agents')
+    }
+  }
+
+  const handleRemoveAgent = (agentId: string) => {
+    const newActiveAgents = activeAgents.filter(a => a.agent_id !== agentId)
+    setActiveAgents(newActiveAgents)
+    
+    // If no agents left and mode is agents, switch to search
+    if (newActiveAgents.length === 0 && currentChatMode === 'agents') {
+      setCurrentChatMode('search')
+    }
+  }
+
+  const handleAddGroup = (group: any) => {
+    if (!activeGroups.find(g => g.id === group.id)) {
+      const newActiveGroups = [...activeGroups, group]
+      setActiveGroups(newActiveGroups)
+      setCurrentChatMode('agent-groups')
+    }
+  }
+
+  const handleRemoveGroup = (groupId: string) => {
+    const newActiveGroups = activeGroups.filter(g => g.id !== groupId)
+    setActiveGroups(newActiveGroups)
+    
+    // If no groups left and mode is agent-groups, switch to search
+    if (newActiveGroups.length === 0 && currentChatMode === 'agent-groups') {
+      setCurrentChatMode('search')
+    }
+  }
+
+  const handleModeSwitch = (mode: 'search' | 'deep-research' | 'agents' | 'agent-groups') => {
+    setCurrentChatMode(mode)
+    
+    // Update the existing flags for backward compatibility
+    if (mode === 'deep-research') {
+      setDeepResearchEnabled(true)
+      setAgentModeEnabled(false)
+    } else if (mode === 'agents' || mode === 'agent-groups') {
+      setDeepResearchEnabled(false)
+      setAgentModeEnabled(true)
+    } else {
+      setDeepResearchEnabled(false)
+      setAgentModeEnabled(false)
     }
   }
 
@@ -385,6 +489,16 @@ export default function CrawlplexityPage() {
               researchProgress={researchProgress}
               onDeepResearchToggle={setDeepResearchEnabled}
               deepResearchEnabled={deepResearchEnabled}
+              activeAgents={activeAgents}
+              activeGroups={activeGroups}
+              availableAgents={availableAgents}
+              availableGroups={availableGroups}
+              currentMode={currentChatMode}
+              onAddAgent={handleAddAgent}
+              onRemoveAgent={handleRemoveAgent}
+              onAddGroup={handleAddGroup}
+              onRemoveGroup={handleRemoveGroup}
+              onModeSwitch={handleModeSwitch}
             />
           )}
         </div>

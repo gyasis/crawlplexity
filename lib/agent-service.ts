@@ -356,6 +356,143 @@ export class CrawlplexityAgentService {
   async getStats(): Promise<any> {
     return this.smalltalk.getStats();
   }
+
+  // Agent Group Management
+  async getAgentGroups(): Promise<any[]> {
+    const db = await this.getDatabase();
+    
+    try {
+      const groups = await db.all(`
+        SELECT at.team_id as id, at.name, at.description, at.created_at, at.updated_at,
+               GROUP_CONCAT(atm.agent_id) as agent_ids
+        FROM agent_teams at
+        LEFT JOIN agent_team_members atm ON at.team_id = atm.team_id
+        GROUP BY at.team_id, at.name, at.description, at.created_at, at.updated_at
+        ORDER BY at.created_at DESC
+      `);
+      
+      return groups.map(group => ({
+        id: group.id,
+        name: group.name,
+        description: group.description,
+        agents: group.agent_ids ? group.agent_ids.split(',') : [],
+        active: true, // TODO: Add active status to database
+        created_at: group.created_at,
+        updated_at: group.updated_at
+      }));
+    } finally {
+      await db.close();
+    }
+  }
+
+  async createAgentGroup(group: { name: string; description?: string; agents: string[] }): Promise<string> {
+    const db = await this.getDatabase();
+    
+    try {
+      await db.run('BEGIN TRANSACTION');
+      
+      // Create the team
+      const result = await db.run(`
+        INSERT INTO agent_teams (name, description)
+        VALUES (?, ?)
+      `, [group.name, group.description || null]);
+      
+      const teamId = result.lastID!.toString();
+      
+      // Add team members
+      for (const agentId of group.agents) {
+        await db.run(`
+          INSERT INTO agent_team_members (team_id, agent_id)
+          VALUES (?, ?)
+        `, [teamId, agentId]);
+      }
+      
+      await db.run('COMMIT');
+      return teamId;
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    } finally {
+      await db.close();
+    }
+  }
+
+  async updateAgentGroup(groupId: string, updates: { name?: string; description?: string; agents?: string[] }): Promise<void> {
+    const db = await this.getDatabase();
+    
+    try {
+      await db.run('BEGIN TRANSACTION');
+      
+      // Update team details if provided
+      if (updates.name || updates.description !== undefined) {
+        await db.run(`
+          UPDATE agent_teams 
+          SET name = COALESCE(?, name), 
+              description = COALESCE(?, description),
+              updated_at = datetime('now')
+          WHERE team_id = ?
+        `, [updates.name || null, updates.description || null, groupId]);
+      }
+      
+      // Update team members if provided
+      if (updates.agents) {
+        // Remove existing members
+        await db.run('DELETE FROM agent_team_members WHERE team_id = ?', [groupId]);
+        
+        // Add new members
+        for (const agentId of updates.agents) {
+          await db.run(`
+            INSERT INTO agent_team_members (team_id, agent_id)
+            VALUES (?, ?)
+          `, [groupId, agentId]);
+        }
+      }
+      
+      await db.run('COMMIT');
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    } finally {
+      await db.close();
+    }
+  }
+
+  async deleteAgentGroup(groupId: string): Promise<void> {
+    const db = await this.getDatabase();
+    
+    try {
+      await db.run('BEGIN TRANSACTION');
+      
+      // Delete team members first (foreign key constraint)
+      await db.run('DELETE FROM agent_team_members WHERE team_id = ?', [groupId]);
+      
+      // Delete the team
+      await db.run('DELETE FROM agent_teams WHERE team_id = ?', [groupId]);
+      
+      await db.run('COMMIT');
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    } finally {
+      await db.close();
+    }
+  }
+
+  async chatWithAgentGroup(groupId: string, message: string, sessionId?: string, userId?: string): Promise<string> {
+    // Get group agents
+    const groups = await this.getAgentGroups();
+    const group = groups.find(g => g.id === groupId);
+    
+    if (!group) {
+      throw new Error(`Agent group ${groupId} not found`);
+    }
+    
+    // For now, use SmallTalk's orchestration with the group's agents as context
+    // In a more advanced implementation, we could create a specific team orchestration
+    const context = `This request should be handled by the "${group.name}" team consisting of agents: ${group.agents.join(', ')}. ${group.description || ''}`;
+    
+    return this.smalltalk.chat(message, userId || 'default', { context, teamId: groupId });
+  }
 }
 
 // Singleton instance

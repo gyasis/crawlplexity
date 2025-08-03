@@ -2,6 +2,7 @@
 
 import { useRef, useEffect } from 'react'
 import { Send, Loader2, User, Sparkles, FileText, Plus, Copy, RefreshCw, Check, Microscope } from 'lucide-react'
+import { ActiveAgentsBar } from '@/components/chat/ActiveAgentsBar'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -47,9 +48,45 @@ interface ChatInterfaceProps {
   researchProgress?: ResearchProgress | null
   onDeepResearchToggle?: (enabled: boolean) => void
   deepResearchEnabled?: boolean
+  // Active agents bar props
+  activeAgents?: any[]
+  activeGroups?: any[]
+  availableAgents?: any[]
+  availableGroups?: any[]
+  currentMode?: 'search' | 'deep-research' | 'agents' | 'agent-groups'
+  onAddAgent?: (agent: any) => void
+  onRemoveAgent?: (agentId: string) => void
+  onAddGroup?: (group: any) => void
+  onRemoveGroup?: (groupId: string) => void
+  onModeSwitch?: (mode: 'search' | 'deep-research' | 'agents' | 'agent-groups') => void
 }
 
-export function ChatInterface({ messages, sources, followUpQuestions, searchStatus, isLoading, input, handleInputChange, handleSubmit, messageData, currentTicker, deepResearchStatus, researchProgress, onDeepResearchToggle, deepResearchEnabled }: ChatInterfaceProps) {
+export function ChatInterface({ 
+  messages, 
+  sources, 
+  followUpQuestions, 
+  searchStatus, 
+  isLoading, 
+  input, 
+  handleInputChange, 
+  handleSubmit, 
+  messageData, 
+  currentTicker, 
+  deepResearchStatus, 
+  researchProgress, 
+  onDeepResearchToggle, 
+  deepResearchEnabled,
+  activeAgents = [],
+  activeGroups = [],
+  availableAgents = [],
+  availableGroups = [],
+  currentMode = 'search',
+  onAddAgent,
+  onRemoveAgent,
+  onAddGroup,
+  onRemoveGroup,
+  onModeSwitch
+}: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
@@ -147,6 +184,22 @@ export function ChatInterface({ messages, sources, followUpQuestions, searchStat
 
   return (
     <div className="flex flex-col h-full relative" style={{ height: 'calc(100vh - 80px)' }}>
+      {/* Active Agents Bar */}
+      {(activeAgents.length > 0 || activeGroups.length > 0 || availableAgents.length > 0 || availableGroups.length > 0) && (
+        <ActiveAgentsBar
+          activeAgents={activeAgents}
+          activeGroups={activeGroups}
+          availableAgents={availableAgents}
+          availableGroups={availableGroups}
+          currentMode={currentMode}
+          onAddAgent={onAddAgent || (() => {})}
+          onRemoveAgent={onRemoveAgent || (() => {})}
+          onAddGroup={onAddGroup || (() => {})}
+          onRemoveGroup={onRemoveGroup || (() => {})}
+          onModeSwitch={onModeSwitch || (() => {})}
+        />
+      )}
+      
       {/* Top gradient overlay */}
       <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-white to-transparent dark:from-zinc-900 dark:to-transparent pointer-events-none z-10" />
       

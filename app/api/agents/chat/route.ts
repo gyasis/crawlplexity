@@ -4,7 +4,7 @@ import { getAgentService } from '@/lib/agent-service';
 // POST /api/agents/chat - Process chat message with agent orchestration (streaming)
 export async function POST(request: NextRequest) {
   try {
-    const { messages, query, agentId, sessionId, userId, parameters, debugMode } = await request.json();
+    const { messages, query, agentId, groupId, sessionId, userId, parameters, debugMode } = await request.json();
     
     if (!query) {
       return NextResponse.json(
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
             message: 'Initializing agent orchestration...'
           })}\n\n`))
 
-          // Check if specific agent requested or use orchestration
+          // Check routing: specific agent, group, or orchestration
           if (agentId) {
             // Direct agent communication
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
@@ -39,6 +39,20 @@ export async function POST(request: NextRequest) {
             })}\n\n`))
 
             const response = await agentService.chatWithAgent(agentId, query, sessionId, userId)
+            
+            // Stream the response
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              type: 'content',
+              content: response
+            })}\n\n`))
+          } else if (groupId) {
+            // Agent group collaboration
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+              type: 'status',
+              message: `Starting agent group collaboration: ${groupId}`
+            })}\n\n`))
+
+            const response = await agentService.chatWithAgentGroup(groupId, query, sessionId, userId)
             
             // Stream the response
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({
