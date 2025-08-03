@@ -22,9 +22,15 @@ import { SettingsSection } from './SettingsSection'
 import { AgentManagement } from './AgentManagement'
 import { WorkflowStatusIndicators } from './WorkflowStatusIndicators'
 import { QuickWorkflowBuilder } from './QuickWorkflowBuilder'
+import { WorkflowTemplateGallery } from './WorkflowTemplateGallery'
 
 export function Sidebar() {
-  const { sidebarState, setSidebarState, isWorkflowBuilderOpen, openWorkflowBuilder, closeWorkflowBuilder } = useSidebar()
+  const { 
+    sidebarState, setSidebarState, 
+    isWorkflowBuilderOpen, openWorkflowBuilder, closeWorkflowBuilder,
+    isTemplateGalleryOpen, openTemplateGallery, closeTemplateGallery,
+    selectedTemplate, setSelectedTemplate
+  } = useSidebar()
   const [modelSelectorOpen, setModelSelectorOpen] = useState(true)
   const [parametersOpen, setParametersOpen] = useState(true)
   const [agentsOpen, setAgentsOpen] = useState(true)
@@ -46,6 +52,7 @@ export function Sidebar() {
   const isSemiCollapsed = sidebarState === 'semi-collapsed'
   const isCollapsed = sidebarState === 'collapsed'
   const isWorkflowBuilder = sidebarState === 'workflow-builder'
+  const isTemplateGallery = sidebarState === 'template-gallery'
 
   const handleSaveWorkflow = async (workflowData: any) => {
     try {
@@ -69,6 +76,12 @@ export function Sidebar() {
       throw error
     }
   }
+
+  const handleTemplateSelect = (template: any) => {
+    setSelectedTemplate(template)
+    closeTemplateGallery()
+    openWorkflowBuilder()
+  }
   
   return (
     <>
@@ -78,25 +91,29 @@ export function Sidebar() {
         transition-all duration-300 ease-in-out z-40
         ${isCollapsed ? 'w-0 -translate-x-full' : 
           isSemiCollapsed ? 'w-12 sm:w-16' : 
-          isWorkflowBuilder ? 'w-80 sm:w-96' : 'w-56 sm:w-80'}
+          isWorkflowBuilder ? 'w-80 sm:w-96' : 
+          isTemplateGallery ? 'w-80 sm:w-96' : 'w-56 sm:w-80'}
         max-w-full
       `}>
         {/* Header */}
         <div className="border-b border-gray-200 dark:border-gray-700">
-          {(isExpanded || isWorkflowBuilder) && (
+          {(isExpanded || isWorkflowBuilder || isTemplateGallery) && (
             <div className="flex items-center justify-between p-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
                   <span className="text-white font-bold text-sm">C</span>
                 </div>
                 <span className="font-semibold text-gray-900 dark:text-white">
-                  {isWorkflowBuilder ? 'Workflow Builder' : 'Crawlplexity'}
+                  {isWorkflowBuilder ? 'Workflow Builder' : 
+                   isTemplateGallery ? 'Template Gallery' : 'Crawlplexity'}
                 </span>
               </div>
               <button
-                onClick={isWorkflowBuilder ? closeWorkflowBuilder : toggleSidebar}
+                onClick={isWorkflowBuilder ? closeWorkflowBuilder : 
+                         isTemplateGallery ? closeTemplateGallery : toggleSidebar}
                 className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
-                title={isWorkflowBuilder ? 'Close builder' : 'Collapse sidebar'}
+                title={isWorkflowBuilder ? 'Close builder' : 
+                       isTemplateGallery ? 'Close gallery' : 'Collapse sidebar'}
               >
                 <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
@@ -116,12 +133,18 @@ export function Sidebar() {
         </div>
         
         {/* Content */}
-        <div className={`flex flex-col overflow-hidden ${(isExpanded || isWorkflowBuilder) ? 'h-[calc(100%-73px)]' : 'h-[calc(100%-64px)]'}`}>
+        <div className={`flex flex-col overflow-hidden ${(isExpanded || isWorkflowBuilder || isTemplateGallery) ? 'h-[calc(100%-73px)]' : 'h-[calc(100%-64px)]'}`}>
           {/* Workflow Builder */}
           {isWorkflowBuilder ? (
             <QuickWorkflowBuilder
               onClose={closeWorkflowBuilder}
               onSave={handleSaveWorkflow}
+              initialTemplate={selectedTemplate}
+            />
+          ) : isTemplateGallery ? (
+            <WorkflowTemplateGallery
+              onClose={closeTemplateGallery}
+              onSelectTemplate={handleTemplateSelect}
             />
           ) : (
             /* Normal Sidebar Content */
@@ -209,7 +232,7 @@ export function Sidebar() {
                   <div className="space-y-3">
                     <WorkflowStatusIndicators isExpanded={isExpanded} isSemiCollapsed={isSemiCollapsed} />
                     {isExpanded && (
-                      <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                      <div className="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-2">
                         <button
                           onClick={openWorkflowBuilder}
                           className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg transition-colors"
@@ -217,6 +240,14 @@ export function Sidebar() {
                         >
                           <Plus className="w-4 h-4" />
                           <span>Create Workflow</span>
+                        </button>
+                        <button
+                          onClick={openTemplateGallery}
+                          className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-purple-50 hover:bg-purple-100 dark:bg-purple-900/20 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-lg transition-colors"
+                          title="Browse Workflow Templates"
+                        >
+                          <GitBranch className="w-4 h-4" />
+                          <span>Browse Templates</span>
                         </button>
                       </div>
                     )}
@@ -306,7 +337,8 @@ export function Sidebar() {
         transition-all duration-300 ease-in-out
         ${isCollapsed ? 'ml-12 sm:ml-16' : 
           isSemiCollapsed ? 'ml-12 sm:ml-16' : 
-          isWorkflowBuilder ? 'ml-80 sm:ml-96' : 'ml-56 sm:ml-80'}
+          isWorkflowBuilder ? 'ml-80 sm:ml-96' : 
+          isTemplateGallery ? 'ml-80 sm:ml-96' : 'ml-56 sm:ml-80'}
         max-w-full
       `} />
     </>

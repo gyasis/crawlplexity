@@ -25,9 +25,22 @@ interface QuickWorkflowNode {
 interface QuickWorkflowBuilderProps {
   onClose: () => void
   onSave: (workflow: any) => Promise<void>
+  initialTemplate?: WorkflowTemplate | null
 }
 
-export function QuickWorkflowBuilder({ onClose, onSave }: QuickWorkflowBuilderProps) {
+interface WorkflowTemplate {
+  template_id: string
+  name: string
+  description: string
+  category: string
+  definition: any
+  complexity_level: string
+  estimated_nodes: number
+  orchestration_type: string
+  created_at: string
+}
+
+export function QuickWorkflowBuilder({ onClose, onSave, initialTemplate }: QuickWorkflowBuilderProps) {
   const [nodes, setNodes] = useState<QuickWorkflowNode[]>([
     { id: 'trigger-1', type: 'trigger', label: 'Start' }
   ])
@@ -40,7 +53,36 @@ export function QuickWorkflowBuilder({ onClose, onSave }: QuickWorkflowBuilderPr
 
   React.useEffect(() => {
     loadAvailableAgents()
-  }, [])
+    
+    // Initialize from template if provided
+    if (initialTemplate) {
+      initializeFromTemplate(initialTemplate)
+    }
+  }, [initialTemplate])
+
+  const initializeFromTemplate = (template: WorkflowTemplate) => {
+    // Set workflow name and description from template
+    setWorkflowName(template.name + ' (Copy)')
+    setWorkflowDescription(template.description)
+
+    // Convert template definition to quick workflow nodes
+    if (template.definition?.nodes) {
+      const templateNodes: QuickWorkflowNode[] = template.definition.nodes.map((node: any) => ({
+        id: node.id,
+        type: node.type === 'trigger' ? 'trigger' : node.type === 'output' ? 'output' : 'agent',
+        label: node.data?.label || node.type,
+        agentId: node.data?.agentId,
+        config: node.data?.config || {}
+      }))
+
+      // Ensure we have at least a trigger node
+      if (!templateNodes.some(n => n.type === 'trigger')) {
+        templateNodes.unshift({ id: 'trigger-1', type: 'trigger', label: 'Start' })
+      }
+
+      setNodes(templateNodes.slice(0, 5)) // Limit to 5 nodes for quick builder
+    }
+  }
 
   const loadAvailableAgents = async () => {
     try {

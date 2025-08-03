@@ -5,7 +5,7 @@ import { ModelStorage } from '@/lib/model-storage'
 import { CustomModel, RemoteServer } from '@/app/types'
 
 // Types
-export type SidebarState = 'expanded' | 'semi-collapsed' | 'collapsed' | 'workflow-builder'
+export type SidebarState = 'expanded' | 'semi-collapsed' | 'collapsed' | 'workflow-builder' | 'template-gallery'
 
 export interface ModelInfo {
   id: string
@@ -37,6 +37,13 @@ export interface SidebarContextType {
   isWorkflowBuilderOpen: boolean
   openWorkflowBuilder: () => void
   closeWorkflowBuilder: () => void
+  
+  // Template gallery state
+  isTemplateGalleryOpen: boolean
+  openTemplateGallery: () => void
+  closeTemplateGallery: () => void
+  selectedTemplate: any | null
+  setSelectedTemplate: (template: any) => void
   
   // Models
   availableModels: ModelInfo[]
@@ -86,6 +93,8 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
   // Sidebar state
   const [sidebarState, setSidebarState] = useState<SidebarState>('semi-collapsed')
   const [isWorkflowBuilderOpen, setIsWorkflowBuilderOpen] = useState(false)
+  const [isTemplateGalleryOpen, setIsTemplateGalleryOpen] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null)
   
   // Models
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
@@ -262,11 +271,25 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
   // Workflow builder controls
   const openWorkflowBuilder = () => {
     setIsWorkflowBuilderOpen(true)
+    setIsTemplateGalleryOpen(false)
     setSidebarState('workflow-builder')
   }
 
   const closeWorkflowBuilder = () => {
     setIsWorkflowBuilderOpen(false)
+    setSelectedTemplate(null)
+    setSidebarState('expanded') // Return to expanded state
+  }
+
+  // Template gallery controls
+  const openTemplateGallery = () => {
+    setIsTemplateGalleryOpen(true)
+    setIsWorkflowBuilderOpen(false)
+    setSidebarState('template-gallery')
+  }
+
+  const closeTemplateGallery = () => {
+    setIsTemplateGalleryOpen(false)
     setSidebarState('expanded') // Return to expanded state
   }
   
@@ -287,8 +310,8 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
   }, [])
   
   useEffect(() => {
-    // Don't persist workflow-builder state to localStorage
-    if (sidebarState !== 'workflow-builder') {
+    // Don't persist workflow-builder or template-gallery state to localStorage
+    if (sidebarState !== 'workflow-builder' && sidebarState !== 'template-gallery') {
       localStorage.setItem('crawlplexity-sidebar-state', sidebarState)
     }
   }, [sidebarState])
@@ -311,6 +334,11 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
     isWorkflowBuilderOpen,
     openWorkflowBuilder,
     closeWorkflowBuilder,
+    isTemplateGalleryOpen,
+    openTemplateGallery,
+    closeTemplateGallery,
+    selectedTemplate,
+    setSelectedTemplate,
     availableModels,
     selectedModel,
     setSelectedModel,
