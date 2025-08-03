@@ -136,3 +136,9 @@ The architecture supports easy extension for:
 - Custom content processing pipelines
 - Enhanced caching strategies
 - Additional UI themes and customizations
+
+## Development Workflow
+
+### Versioning Guidelines
+- From now on changes to this repository needs to be decisive if it's a major or minor fix and update the versions appropriately
+- Never go to a full version whole number with users' express request
