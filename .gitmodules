@@ -1,0 +1,3 @@
+[submodule "smalltalk-integration"]
+	path = smalltalk-integration
+	url = https://github.com/gyasis/smalltalk.git

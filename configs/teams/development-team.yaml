@@ -1,0 +1,63 @@
+# Development Team Configuration
+team:
+  name: "Development Team"
+  description: "A collaborative team for software development projects combining research, coding, and project management"
+  
+members:
+  - agent_id: "conversation-manager"
+    role: "team_lead"
+    priority: 1
+    responsibilities:
+      - "Coordinate team interactions"
+      - "Manage project workflow"
+      - "Delegate tasks to specialists"
+      - "Ensure quality and completeness"
+  
+  - agent_id: "research-assistant" 
+    role: "researcher"
+    priority: 2
+    responsibilities:
+      - "Conduct technical research"
+      - "Analyze requirements"
+      - "Gather best practices"
+      - "Validate solutions"
+  
+  - agent_id: "coding-assistant"
+    role: "developer"
+    priority: 2
+    responsibilities:
+      - "Write and review code"
+      - "Debug issues"
+      - "Implement solutions"
+      - "Optimize performance"
+
+orchestration:
+  coordination_strategy: "hierarchical"
+  handoff_rules:
+    - condition: "user_asks_technical_question"
+      route_to: "research-assistant"
+      escalate_to: "conversation-manager"
+    
+    - condition: "code_needs_writing_or_debugging"
+      route_to: "coding-assistant"
+      escalate_to: "conversation-manager"
+    
+    - condition: "complex_multi_step_task"
+      route_to: "conversation-manager"
+      delegate: true
+  
+  communication:
+    shared_context: true
+    progress_tracking: true
+    error_escalation: true
+
+metadata:
+  version: "1.0.0"
+  author: "Crawlplexity Team"
+  description: "Development-focused team for technical projects"
+  tags:
+    - "development"
+    - "collaboration"
+    - "technical"
+  created: "2024-08-03T00:00:00Z"
+  updated: "2024-08-03T00:00:00Z"
