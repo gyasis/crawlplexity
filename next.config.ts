@@ -29,6 +29,10 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  experimental: {
+    // Bundle these packages instead of externalizing them
+    serverComponentsExternalPackages: [],
+  },
 };
 
 export default nextConfig;
