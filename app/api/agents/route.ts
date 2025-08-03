@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({
       success: true,
-      data: { agentId },
+      data: { agent_id: agentId },
       message: `Agent '${manifest.config.name}' created successfully`
     });
   } catch (error) {

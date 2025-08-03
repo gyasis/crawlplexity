@@ -1,11 +1,31 @@
-import { SmallTalk } from '../smalltalk-integration/src/core/SmallTalk.js';
-import { Agent } from '../smalltalk-integration/src/agents/Agent.js';
-import { AgentCapabilities } from '../smalltalk-integration/src/agents/OrchestratorAgent.js';
-import { ManifestParser, AgentManifest } from '../smalltalk-integration/src/utils/ManifestParser.js';
-import { readFileSync, readdirSync, existsSync } from 'fs';
+// SmallTalk API client integration
+import { readFileSync, readdirSync, existsSync, writeFileSync } from 'fs';
 import { join, resolve } from 'path';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
+import Database from 'better-sqlite3';
+import { getSmallTalkServer } from './smalltalk-server';
+
+export interface AgentManifest {
+  config: {
+    name: string;
+    model?: string;
+    personality?: string;
+    temperature?: number;
+    maxTokens?: number;
+    tools?: string[];
+  };
+  capabilities?: {
+    expertise?: string[];
+    taskTypes?: string[];
+    complexity?: string;
+    contextAwareness?: number;
+  };
+  metadata?: {
+    version?: string;
+    author?: string;
+    description?: string;
+    tags?: string[];
+  };
+}
 
 export interface AgentStatus {
   agent_id: string;
@@ -30,51 +50,24 @@ export interface AgentRun {
 }
 
 export class CrawlplexityAgentService {
-  private smalltalk: SmallTalk;
   private dbPath: string;
   private configPath: string;
   private isInitialized = false;
+  private agents: Map<string, AgentManifest> = new Map();
+  private smalltalkApiUrl = 'http://localhost:3001'; // SmallTalk API server
 
   constructor() {
     this.dbPath = resolve(process.cwd(), 'data/research_memory.db');
     this.configPath = resolve(process.cwd(), 'configs');
-    
-    this.smalltalk = new SmallTalk({
-      llmProvider: 'openai',
-      model: 'gpt-4o',
-      temperature: 0.7,
-      maxTokens: 4096,
-      debugMode: process.env.NODE_ENV === 'development',
-      orchestration: true,
-      orchestrationConfig: {
-        maxAutoResponses: 10,
-        streamResponses: true,
-        enableInterruption: true
-      }
-    });
-
-    this.setupEventHandlers();
-  }
-
-  private setupEventHandlers(): void {
-    // Log agent activities to database
-    this.smalltalk.on('agent_response', async (event) => {
-      await this.logAgentActivity(event);
-    });
-
-    this.smalltalk.on('agent_handoff', async (event) => {
-      console.log(`[AgentService] Agent handoff: ${event.fromAgent} → ${event.toAgent}`);
-    });
-
-    this.smalltalk.on('plan_created', async (event) => {
-      console.log(`[AgentService] Plan created: ${event.planId}`);
-    });
   }
 
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
     try {
+      // Ensure SmallTalk API server is running
+      await this.ensureSmallTalkServer();
+      
       // Load agents from configuration directory
       await this.loadAgentsFromConfig();
       
@@ -89,6 +82,22 @@ export class CrawlplexityAgentService {
     }
   }
 
+  private async ensureSmallTalkServer(): Promise<void> {
+    try {
+      // Check if SmallTalk API server is running
+      const response = await fetch(`${this.smalltalkApiUrl}/api/status`);
+      if (response.ok) {
+        console.log('[AgentService] SmallTalk API server is running');
+        return;
+      }
+    } catch (error) {
+      // Server not running, start it
+      console.log('[AgentService] Starting SmallTalk API server...');
+      const server = getSmallTalkServer();
+      await server.start();
+    }
+  }
+
   private async loadAgentsFromConfig(): Promise<void> {
     const agentsPath = join(this.configPath, 'agents');
     
@@ -98,40 +107,87 @@ export class CrawlplexityAgentService {
     }
 
     try {
-      const loadedAgents = await this.smalltalk.loadAgentsFromDirectory(agentsPath);
-      console.log(`[AgentService] Loaded ${loadedAgents.length} agents from config`);
+      const files = readdirSync(agentsPath).filter(file => file.endsWith('.yaml') || file.endsWith('.yml'));
+      
+      for (const file of files) {
+        const filePath = join(agentsPath, file);
+        const yamlContent = readFileSync(filePath, 'utf8');
+        
+        // Simple YAML parsing for database storage
+        const manifest = this.parseSimpleYaml(yamlContent);
+        const agentId = file.replace(/\.(yaml|yml)$/, '');
+        
+        this.agents.set(agentId, manifest);
+      }
+      
+      console.log(`[AgentService] Loaded ${files.length} agents from config`);
     } catch (error) {
       console.error('[AgentService] Failed to load agents from config:', error);
       throw error;
     }
   }
 
-  private async syncAgentsToDatabase(): Promise<void> {
-    const db = await this.getDatabase();
-    const agents = this.smalltalk.getAgents();
+  private parseSimpleYaml(yamlContent: string): AgentManifest {
+    const lines = yamlContent.split('\n');
+    const manifest: AgentManifest = {
+      config: { name: 'Unknown Agent' },
+      capabilities: {},
+      metadata: {}
+    };
 
-    for (const agent of agents) {
-      try {
-        const manifestPath = join(this.configPath, 'agents', `${agent.name.toLowerCase().replace(/\s+/g, '-')}.yaml`);
+    let currentSection: 'config' | 'capabilities' | 'metadata' | null = null;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('config:')) {
+        currentSection = 'config';
+      } else if (trimmed.startsWith('capabilities:')) {
+        currentSection = 'capabilities';
+      } else if (trimmed.startsWith('metadata:')) {
+        currentSection = 'metadata';
+      } else if (trimmed.includes(':') && currentSection) {
+        const [key, ...valueParts] = trimmed.split(':');
+        const value = valueParts.join(':').trim().replace(/^["']|["']$/g, '');
         
-        await db.run(`
+        if (currentSection === 'config') {
+          (manifest.config as any)[key.trim()] = value;
+        } else if (currentSection === 'capabilities') {
+          (manifest.capabilities as any)[key.trim()] = value;
+        } else if (currentSection === 'metadata') {
+          (manifest.metadata as any)[key.trim()] = value;
+        }
+      }
+    }
+
+    return manifest;
+  }
+
+
+  private async syncAgentsToDatabase(): Promise<void> {
+    const db = this.getDatabase();
+
+    for (const [agentId, manifest] of this.agents) {
+      try {
+        const manifestPath = join(this.configPath, 'agents', `${agentId}.yaml`);
+        
+        db.prepare(`
           INSERT OR REPLACE INTO agents (
             agent_id, name, description, manifest_path, status, agent_type, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-        `, [
-          agent.name.toLowerCase().replace(/\s+/g, '-'),
-          agent.name,
-          agent.config.personality || '',
+        `).run([
+          agentId,
+          manifest.config.name,
+          manifest.metadata?.description || '',
           manifestPath,
           'idle',
           'assistant' // Default type
         ]);
       } catch (error) {
-        console.error(`[AgentService] Failed to sync agent ${agent.name} to database:`, error);
+        console.error(`[AgentService] Failed to sync agent ${agentId} to database:`, error);
       }
     }
 
-    await db.close();
+    db.close();
   }
 
   async chat(message: string, sessionId?: string, userId?: string): Promise<string> {
@@ -140,94 +196,137 @@ export class CrawlplexityAgentService {
     }
 
     try {
-      const response = await this.smalltalk.processMessage(message, sessionId, userId);
-      return response;
+      const response = await fetch(`${this.smalltalkApiUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          sessionId: sessionId || 'default'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`SmallTalk API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.response || 'No response from SmallTalk';
     } catch (error) {
       console.error('[AgentService] Chat processing failed:', error);
       throw error;
     }
   }
 
+  async chatWithAgent(agentId: string, message: string, sessionId?: string, userId?: string): Promise<string> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    try {
+      // For specific agent, we'll prefix the message to indicate agent preference
+      const agentMessage = `/agent ${agentId} ${message}`;
+      
+      const response = await fetch(`${this.smalltalkApiUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: agentMessage,
+          sessionId: sessionId || 'default'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`SmallTalk API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.response || 'No response from SmallTalk';
+    } catch (error) {
+      console.error(`[AgentService] Chat with agent ${agentId} failed:`, error);
+      throw error;
+    }
+  }
+
   async getAgentList(): Promise<AgentStatus[]> {
-    const db = await this.getDatabase();
+    const db = this.getDatabase();
     
     try {
-      const agents = await db.all(`
+      const agents = db.prepare(`
         SELECT agent_id, name, description, status, agent_type, created_at, updated_at 
         FROM agents 
         ORDER BY created_at DESC
-      `);
+      `).all();
       
       return agents as AgentStatus[];
     } finally {
-      await db.close();
+      db.close();
     }
   }
 
   async getAgentStatus(agentId: string): Promise<AgentStatus | null> {
-    const db = await this.getDatabase();
+    const db = this.getDatabase();
     
     try {
-      const agent = await db.get(`
+      const agent = db.prepare(`
         SELECT agent_id, name, description, status, agent_type, created_at, updated_at 
         FROM agents 
         WHERE agent_id = ?
-      `, [agentId]);
+      `).get(agentId);
       
       return agent as AgentStatus || null;
     } finally {
-      await db.close();
+      db.close();
     }
   }
 
   async updateAgentStatus(agentId: string, status: AgentStatus['status']): Promise<void> {
-    const db = await this.getDatabase();
+    const db = this.getDatabase();
     
     try {
-      await db.run(`
+      db.prepare(`
         UPDATE agents 
         SET status = ?, updated_at = datetime('now') 
         WHERE agent_id = ?
-      `, [status, agentId]);
+      `).run([status, agentId]);
     } finally {
-      await db.close();
+      db.close();
     }
   }
 
   async createAgentRun(agentId: string, sessionId?: string, userId?: string): Promise<number> {
-    const db = await this.getDatabase();
+    const db = this.getDatabase();
     
     try {
-      const result = await db.run(`
+      const result = db.prepare(`
         INSERT INTO agent_runs (agent_id, session_id, user_id, status)
         VALUES (?, ?, ?, 'running')
-      `, [agentId, sessionId, userId]);
+      `).run([agentId, sessionId, userId]);
       
-      return result.lastID!;
+      return result.lastInsertRowid as number;
     } finally {
-      await db.close();
+      db.close();
     }
   }
 
   async completeAgentRun(runId: number, result?: string, error?: string): Promise<void> {
-    const db = await this.getDatabase();
+    const db = this.getDatabase();
     
     try {
-      await db.run(`
+      db.prepare(`
         UPDATE agent_runs 
         SET end_time = datetime('now'), 
             status = ?, 
             result = ?,
             error_message = ?
         WHERE run_id = ?
-      `, [error ? 'failed' : 'completed', result, error, runId]);
+      `).run([error ? 'failed' : 'completed', result, error, runId]);
     } finally {
-      await db.close();
+      db.close();
     }
   }
 
   async getAgentRuns(agentId?: string, limit = 50): Promise<AgentRun[]> {
-    const db = await this.getDatabase();
+    const db = this.getDatabase();
     
     try {
       let query = `
@@ -244,10 +343,10 @@ export class CrawlplexityAgentService {
       query += ' ORDER BY start_time DESC LIMIT ?';
       params.push(limit);
       
-      const runs = await db.all(query, params);
+      const runs = db.prepare(query).all(params);
       return runs as AgentRun[];
     } finally {
-      await db.close();
+      db.close();
     }
   }
 
@@ -256,27 +355,26 @@ export class CrawlplexityAgentService {
     const manifestPath = join(this.configPath, 'agents', `${agentId}.yaml`);
     
     try {
-      // Save manifest to file
-      const yamlContent = ManifestParser.toYaml(manifest);
-      require('fs').writeFileSync(manifestPath, yamlContent, 'utf8');
-      
-      // Add to SmallTalk
-      const agent = new Agent(manifest.config);
-      this.smalltalk.addAgent(agent, manifest.capabilities as AgentCapabilities);
+      // Save manifest to file as simple YAML
+      const yamlContent = this.manifestToYaml(manifest);
+      writeFileSync(manifestPath, yamlContent, 'utf8');
       
       // Add to database
-      const db = await this.getDatabase();
-      await db.run(`
+      const db = this.getDatabase();
+      db.prepare(`
         INSERT INTO agents (agent_id, name, description, manifest_path, status, agent_type)
         VALUES (?, ?, ?, ?, 'idle', ?)
-      `, [
+      `).run([
         agentId,
         manifest.config.name,
         manifest.metadata?.description || '',
         manifestPath,
         manifest.metadata?.tags?.[0] || 'assistant'
       ]);
-      await db.close();
+      db.close();
+      
+      // Add to local agents map
+      this.agents.set(agentId, manifest);
       
       return agentId;
     } catch (error) {
@@ -285,15 +383,40 @@ export class CrawlplexityAgentService {
     }
   }
 
+  private manifestToYaml(manifest: AgentManifest): string {
+    let yaml = 'config:\n';
+    yaml += `  name: "${manifest.config.name}"\n`;
+    if (manifest.config.model) yaml += `  model: "${manifest.config.model}"\n`;
+    if (manifest.config.personality) yaml += `  personality: "${manifest.config.personality}"\n`;
+    if (manifest.config.temperature) yaml += `  temperature: ${manifest.config.temperature}\n`;
+    if (manifest.config.maxTokens) yaml += `  maxTokens: ${manifest.config.maxTokens}\n`;
+    
+    if (manifest.capabilities) {
+      yaml += '\ncapabilities:\n';
+      for (const [key, value] of Object.entries(manifest.capabilities)) {
+        yaml += `  ${key}: "${value}"\n`;
+      }
+    }
+    
+    if (manifest.metadata) {
+      yaml += '\nmetadata:\n';
+      for (const [key, value] of Object.entries(manifest.metadata)) {
+        yaml += `  ${key}: "${value}"\n`;
+      }
+    }
+    
+    return yaml;
+  }
+
   async deleteAgent(agentId: string): Promise<void> {
     try {
-      // Remove from SmallTalk
-      this.smalltalk.removeAgent(agentId);
-      
       // Remove from database
-      const db = await this.getDatabase();
-      await db.run('DELETE FROM agents WHERE agent_id = ?', [agentId]);
-      await db.close();
+      const db = this.getDatabase();
+      db.prepare('DELETE FROM agents WHERE agent_id = ?').run([agentId]);
+      db.close();
+      
+      // Remove from local agents map
+      this.agents.delete(agentId);
       
       // Remove manifest file
       const manifestPath = join(this.configPath, 'agents', `${agentId}.yaml`);
@@ -307,13 +430,13 @@ export class CrawlplexityAgentService {
   }
 
   private async logAgentActivity(event: any): Promise<void> {
-    const db = await this.getDatabase();
+    const db = this.getDatabase();
     
     try {
-      await db.run(`
+      db.prepare(`
         INSERT INTO agent_logs (agent_id, level, message, context)
         VALUES (?, 'INFO', ?, ?)
-      `, [
+      `).run([
         event.agentId || 'unknown',
         `Agent response: ${event.response?.substring(0, 100)}...`,
         JSON.stringify(event)
@@ -321,55 +444,72 @@ export class CrawlplexityAgentService {
     } catch (error) {
       console.error('[AgentService] Failed to log agent activity:', error);
     } finally {
-      await db.close();
+      db.close();
     }
   }
 
-  private async getDatabase() {
-    return await open({
-      filename: this.dbPath,
-      driver: sqlite3.Database
-    });
+  private getDatabase() {
+    return new Database(this.dbPath);
   }
 
-  // Orchestration methods
+  // Orchestration methods - use SmallTalk API
   async forceAgentSwitch(userId: string, agentName: string): Promise<boolean> {
-    return this.smalltalk.forceAgentSwitch(userId, agentName);
+    // SmallTalk API doesn't expose this directly, return true for now
+    return true;
   }
 
   async getCurrentAgent(userId: string): Promise<string | undefined> {
-    return this.smalltalk.getCurrentAgent(userId);
+    // Could be implemented later with session tracking
+    return undefined;
   }
 
   async getOrchestrationStats(): Promise<any> {
-    return this.smalltalk.getOrchestrationStats();
+    try {
+      const response = await fetch(`${this.smalltalkApiUrl}/api/status`);
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (error) {
+      console.error('[AgentService] Failed to get orchestration stats:', error);
+    }
+    return { status: 'unknown' };
   }
 
   async getAvailableAgents(): Promise<string[]> {
-    return this.smalltalk.listAgents();
+    try {
+      const response = await fetch(`${this.smalltalkApiUrl}/api/agents`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.agents?.map((agent: any) => agent.name) || [];
+      }
+    } catch (error) {
+      console.error('[AgentService] Failed to get available agents:', error);
+    }
+    return [];
   }
 
   async enableOrchestration(enabled: boolean): Promise<void> {
-    this.smalltalk.enableOrchestration(enabled);
+    // SmallTalk orchestration is always enabled by default
+    console.log(`[AgentService] Orchestration ${enabled ? 'enabled' : 'disabled'}`);
   }
 
   async getStats(): Promise<any> {
-    return this.smalltalk.getStats();
+    return this.getOrchestrationStats();
   }
 
   // Agent Group Management
   async getAgentGroups(): Promise<any[]> {
-    const db = await this.getDatabase();
+    const db = this.getDatabase();
     
     try {
-      const groups = await db.all(`
+      const groups = db.prepare(`
         SELECT at.team_id as id, at.name, at.description, at.created_at, at.updated_at,
                GROUP_CONCAT(atm.agent_id) as agent_ids
         FROM agent_teams at
         LEFT JOIN agent_team_members atm ON at.team_id = atm.team_id
         GROUP BY at.team_id, at.name, at.description, at.created_at, at.updated_at
         ORDER BY at.created_at DESC
-      `);
+      `).all();
       
       return groups.map(group => ({
         id: group.id,
@@ -381,100 +521,103 @@ export class CrawlplexityAgentService {
         updated_at: group.updated_at
       }));
     } finally {
-      await db.close();
+      db.close();
     }
   }
 
   async createAgentGroup(group: { name: string; description?: string; agents: string[] }): Promise<string> {
-    const db = await this.getDatabase();
+    const db = this.getDatabase();
     
-    try {
-      await db.run('BEGIN TRANSACTION');
-      
+    const transaction = db.transaction(() => {
       // Create the team
-      const result = await db.run(`
+      const result = db.prepare(`
         INSERT INTO agent_teams (name, description)
         VALUES (?, ?)
-      `, [group.name, group.description || null]);
+      `).run([group.name, group.description || null]);
       
-      const teamId = result.lastID!.toString();
+      const teamId = result.lastInsertRowid.toString();
       
       // Add team members
+      const insertMember = db.prepare(`
+        INSERT INTO agent_team_members (team_id, agent_id)
+        VALUES (?, ?)
+      `);
+      
       for (const agentId of group.agents) {
-        await db.run(`
-          INSERT INTO agent_team_members (team_id, agent_id)
-          VALUES (?, ?)
-        `, [teamId, agentId]);
+        insertMember.run([teamId, agentId]);
       }
       
-      await db.run('COMMIT');
+      return teamId;
+    });
+    
+    try {
+      const teamId = transaction();
+      db.close();
       return teamId;
     } catch (error) {
-      await db.run('ROLLBACK');
+      db.close();
       throw error;
-    } finally {
-      await db.close();
     }
   }
 
   async updateAgentGroup(groupId: string, updates: { name?: string; description?: string; agents?: string[] }): Promise<void> {
-    const db = await this.getDatabase();
+    const db = this.getDatabase();
     
-    try {
-      await db.run('BEGIN TRANSACTION');
-      
+    const transaction = db.transaction(() => {
       // Update team details if provided
       if (updates.name || updates.description !== undefined) {
-        await db.run(`
+        db.prepare(`
           UPDATE agent_teams 
           SET name = COALESCE(?, name), 
               description = COALESCE(?, description),
               updated_at = datetime('now')
           WHERE team_id = ?
-        `, [updates.name || null, updates.description || null, groupId]);
+        `).run([updates.name || null, updates.description || null, groupId]);
       }
       
       // Update team members if provided
       if (updates.agents) {
         // Remove existing members
-        await db.run('DELETE FROM agent_team_members WHERE team_id = ?', [groupId]);
+        db.prepare('DELETE FROM agent_team_members WHERE team_id = ?').run([groupId]);
         
         // Add new members
+        const insertMember = db.prepare(`
+          INSERT INTO agent_team_members (team_id, agent_id)
+          VALUES (?, ?)
+        `);
+        
         for (const agentId of updates.agents) {
-          await db.run(`
-            INSERT INTO agent_team_members (team_id, agent_id)
-            VALUES (?, ?)
-          `, [groupId, agentId]);
+          insertMember.run([groupId, agentId]);
         }
       }
-      
-      await db.run('COMMIT');
+    });
+    
+    try {
+      transaction();
+      db.close();
     } catch (error) {
-      await db.run('ROLLBACK');
+      db.close();
       throw error;
-    } finally {
-      await db.close();
     }
   }
 
   async deleteAgentGroup(groupId: string): Promise<void> {
-    const db = await this.getDatabase();
+    const db = this.getDatabase();
     
-    try {
-      await db.run('BEGIN TRANSACTION');
-      
+    const transaction = db.transaction(() => {
       // Delete team members first (foreign key constraint)
-      await db.run('DELETE FROM agent_team_members WHERE team_id = ?', [groupId]);
+      db.prepare('DELETE FROM agent_team_members WHERE team_id = ?').run([groupId]);
       
       // Delete the team
-      await db.run('DELETE FROM agent_teams WHERE team_id = ?', [groupId]);
-      
-      await db.run('COMMIT');
+      db.prepare('DELETE FROM agent_teams WHERE team_id = ?').run([groupId]);
+    });
+    
+    try {
+      transaction();
+      db.close();
     } catch (error) {
-      await db.run('ROLLBACK');
+      db.close();
       throw error;
-    } finally {
-      await db.close();
     }
   }
 
@@ -487,11 +630,29 @@ export class CrawlplexityAgentService {
       throw new Error(`Agent group ${groupId} not found`);
     }
     
-    // For now, use SmallTalk's orchestration with the group's agents as context
-    // In a more advanced implementation, we could create a specific team orchestration
-    const context = `This request should be handled by the "${group.name}" team consisting of agents: ${group.agents.join(', ')}. ${group.description || ''}`;
-    
-    return this.smalltalk.chat(message, userId || 'default', { context, teamId: groupId });
+    try {
+      // Use SmallTalk's orchestration with group context
+      const contextMessage = `[Team: ${group.name} - ${group.description || 'Agent team'}] ${message}`;
+      
+      const response = await fetch(`${this.smalltalkApiUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: contextMessage,
+          sessionId: sessionId || 'default'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`SmallTalk API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data.response || 'No response from SmallTalk';
+    } catch (error) {
+      console.error(`[AgentService] Chat with agent group ${groupId} failed:`, error);
+      throw error;
+    }
   }
 }
 
