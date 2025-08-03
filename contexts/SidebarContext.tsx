@@ -5,7 +5,7 @@ import { ModelStorage } from '@/lib/model-storage'
 import { CustomModel, RemoteServer } from '@/app/types'
 
 // Types
-export type SidebarState = 'expanded' | 'semi-collapsed' | 'collapsed'
+export type SidebarState = 'expanded' | 'semi-collapsed' | 'collapsed' | 'workflow-builder'
 
 export interface ModelInfo {
   id: string
@@ -32,6 +32,11 @@ export interface SidebarContextType {
   // Sidebar state
   sidebarState: SidebarState
   setSidebarState: (state: SidebarState) => void
+  
+  // Workflow builder state
+  isWorkflowBuilderOpen: boolean
+  openWorkflowBuilder: () => void
+  closeWorkflowBuilder: () => void
   
   // Models
   availableModels: ModelInfo[]
@@ -80,6 +85,7 @@ interface SidebarProviderProps {
 export function SidebarProvider({ children }: SidebarProviderProps) {
   // Sidebar state
   const [sidebarState, setSidebarState] = useState<SidebarState>('semi-collapsed')
+  const [isWorkflowBuilderOpen, setIsWorkflowBuilderOpen] = useState(false)
   
   // Models
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
@@ -252,6 +258,17 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
   const clearDebugLogs = () => {
     setDebugLogs([])
   }
+
+  // Workflow builder controls
+  const openWorkflowBuilder = () => {
+    setIsWorkflowBuilderOpen(true)
+    setSidebarState('workflow-builder')
+  }
+
+  const closeWorkflowBuilder = () => {
+    setIsWorkflowBuilderOpen(false)
+    setSidebarState('expanded') // Return to expanded state
+  }
   
   // Load models on mount
   useEffect(() => {
@@ -270,7 +287,10 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
   }, [])
   
   useEffect(() => {
-    localStorage.setItem('crawlplexity-sidebar-state', sidebarState)
+    // Don't persist workflow-builder state to localStorage
+    if (sidebarState !== 'workflow-builder') {
+      localStorage.setItem('crawlplexity-sidebar-state', sidebarState)
+    }
   }, [sidebarState])
   
   // Persist debug mode to localStorage
@@ -288,6 +308,9 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
   const contextValue: SidebarContextType = {
     sidebarState,
     setSidebarState,
+    isWorkflowBuilderOpen,
+    openWorkflowBuilder,
+    closeWorkflowBuilder,
     availableModels,
     selectedModel,
     setSelectedModel,

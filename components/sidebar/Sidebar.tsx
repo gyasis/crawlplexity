@@ -11,19 +11,24 @@ import {
   Sliders,
   Bug,
   Bot,
-  ChevronDown
+  ChevronDown,
+  GitBranch,
+  Plus
 } from 'lucide-react'
 import { ModelSelector } from './ModelSelector'
 import { EnhancedParameterControls } from './EnhancedParameterControls'
 import { DebugToggle } from './DebugToggle'
 import { SettingsSection } from './SettingsSection'
 import { AgentManagement } from './AgentManagement'
+import { WorkflowStatusIndicators } from './WorkflowStatusIndicators'
+import { QuickWorkflowBuilder } from './QuickWorkflowBuilder'
 
 export function Sidebar() {
-  const { sidebarState, setSidebarState } = useSidebar()
+  const { sidebarState, setSidebarState, isWorkflowBuilderOpen, openWorkflowBuilder, closeWorkflowBuilder } = useSidebar()
   const [modelSelectorOpen, setModelSelectorOpen] = useState(true)
   const [parametersOpen, setParametersOpen] = useState(true)
   const [agentsOpen, setAgentsOpen] = useState(true)
+  const [workflowsOpen, setWorkflowsOpen] = useState(true)
   const [debugOpen, setDebugOpen] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(true)
   
@@ -40,6 +45,30 @@ export function Sidebar() {
   const isExpanded = sidebarState === 'expanded'
   const isSemiCollapsed = sidebarState === 'semi-collapsed'
   const isCollapsed = sidebarState === 'collapsed'
+  const isWorkflowBuilder = sidebarState === 'workflow-builder'
+
+  const handleSaveWorkflow = async (workflowData: any) => {
+    try {
+      const response = await fetch('/api/workflows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(workflowData)
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to create workflow')
+      }
+
+      const result = await response.json()
+      console.log('Workflow created successfully:', result)
+      
+      // Optionally refresh workflow status indicators
+      // This would trigger a re-fetch of active workflows
+    } catch (error) {
+      console.error('Failed to save workflow:', error)
+      throw error
+    }
+  }
   
   return (
     <>
@@ -48,23 +77,26 @@ export function Sidebar() {
         fixed left-0 top-0 h-full bg-white dark:bg-zinc-900 border-r border-gray-200 dark:border-gray-700 
         transition-all duration-300 ease-in-out z-40
         ${isCollapsed ? 'w-0 -translate-x-full' : 
-          isSemiCollapsed ? 'w-12 sm:w-16' : 'w-56 sm:w-80'}
+          isSemiCollapsed ? 'w-12 sm:w-16' : 
+          isWorkflowBuilder ? 'w-80 sm:w-96' : 'w-56 sm:w-80'}
         max-w-full
       `}>
         {/* Header */}
         <div className="border-b border-gray-200 dark:border-gray-700">
-          {isExpanded && (
+          {(isExpanded || isWorkflowBuilder) && (
             <div className="flex items-center justify-between p-4">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
                   <span className="text-white font-bold text-sm">C</span>
                 </div>
-                <span className="font-semibold text-gray-900 dark:text-white">Crawlplexity</span>
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {isWorkflowBuilder ? 'Workflow Builder' : 'Crawlplexity'}
+                </span>
               </div>
               <button
-                onClick={toggleSidebar}
+                onClick={isWorkflowBuilder ? closeWorkflowBuilder : toggleSidebar}
                 className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
-                title="Collapse sidebar"
+                title={isWorkflowBuilder ? 'Close builder' : 'Collapse sidebar'}
               >
                 <ChevronLeft className="w-4 h-4 text-gray-600 dark:text-gray-400" />
               </button>
@@ -84,9 +116,17 @@ export function Sidebar() {
         </div>
         
         {/* Content */}
-        <div className={`flex flex-col overflow-hidden ${isExpanded ? 'h-[calc(100%-73px)]' : 'h-[calc(100%-64px)]'}`}>
-          {/* Scrollable content area */}
-          <div className="flex-1 overflow-y-auto">
+        <div className={`flex flex-col overflow-hidden ${(isExpanded || isWorkflowBuilder) ? 'h-[calc(100%-73px)]' : 'h-[calc(100%-64px)]'}`}>
+          {/* Workflow Builder */}
+          {isWorkflowBuilder ? (
+            <QuickWorkflowBuilder
+              onClose={closeWorkflowBuilder}
+              onSave={handleSaveWorkflow}
+            />
+          ) : (
+            /* Normal Sidebar Content */
+            <>
+            <div className="flex-1 overflow-y-auto">
             <div className="p-4 space-y-6">
               {/* Model Selection */}
               <div className="space-y-2">
@@ -151,6 +191,39 @@ export function Sidebar() {
                 )}
               </div>
               
+              {/* Workflows */}
+              <div className="space-y-2">
+                {isExpanded && (
+                  <div 
+                    className="flex items-center justify-between cursor-pointer"
+                    onClick={() => setWorkflowsOpen(!workflowsOpen)}
+                  >
+                    <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                      <GitBranch className="w-4 h-4" />
+                      <span>Workflows</span>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform ${workflowsOpen ? 'rotate-180' : ''}`} />
+                  </div>
+                )}
+                {((isExpanded && workflowsOpen) || isSemiCollapsed) && !isCollapsed && (
+                  <div className="space-y-3">
+                    <WorkflowStatusIndicators isExpanded={isExpanded} isSemiCollapsed={isSemiCollapsed} />
+                    {isExpanded && (
+                      <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <button
+                          onClick={openWorkflowBuilder}
+                          className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg transition-colors"
+                          title="Create New Workflow"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Create Workflow</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              
               {/* Debug Mode */}
               <div className="space-y-2">
                 {isExpanded && (
@@ -211,6 +284,8 @@ export function Sidebar() {
               </div>
             )}
           </div>
+          </>
+          )}
         </div>
       </div>
       
@@ -230,7 +305,8 @@ export function Sidebar() {
       <div className={`
         transition-all duration-300 ease-in-out
         ${isCollapsed ? 'ml-12 sm:ml-16' : 
-          isSemiCollapsed ? 'ml-12 sm:ml-16' : 'ml-56 sm:ml-80'}
+          isSemiCollapsed ? 'ml-12 sm:ml-16' : 
+          isWorkflowBuilder ? 'ml-80 sm:ml-96' : 'ml-56 sm:ml-80'}
         max-w-full
       `} />
     </>

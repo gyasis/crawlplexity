@@ -649,6 +649,47 @@ export class CrawlplexityWorkflowService {
     }
   }
 
+  async getAllWorkflowExecutions(
+    filters: { limit?: number; status?: string | null } = {}
+  ): Promise<WorkflowExecution[]> {
+    if (!this.isInitialized) await this.initialize();
+
+    const db = this.getDatabase();
+    
+    try {
+      let query = 'SELECT * FROM workflow_executions WHERE 1=1';
+      const params: any[] = [];
+
+      if (filters.status) {
+        const statuses = filters.status.split(',').map(s => s.trim());
+        const placeholders = statuses.map(() => '?').join(',');
+        query += ` AND status IN (${placeholders})`;
+        params.push(...statuses);
+      }
+
+      query += ' ORDER BY started_at DESC';
+
+      if (filters.limit) {
+        query += ' LIMIT ?';
+        params.push(filters.limit);
+      }
+
+      const executions = db.prepare(query).all(params) as any[];
+      
+      return executions.map(execution => ({
+        ...execution,
+        trigger_context: JSON.parse(execution.trigger_context || '{}'),
+        input_data: JSON.parse(execution.input_data || '{}'),
+        output_data: JSON.parse(execution.output_data || '{}'),
+        execution_log: JSON.parse(execution.execution_log || '{}'),
+        orchestration_trace: JSON.parse(execution.orchestration_trace || '{}'),
+        error_details: JSON.parse(execution.error_details || '{}')
+      }));
+    } finally {
+      db.close();
+    }
+  }
+
   async getWorkflowExecutions(
     workflowId: string,
     filters: { limit?: number; status?: string | null } = {}
