@@ -52,38 +52,35 @@ cd smalltalk-integration
 npm install
 ```
 
-### 4. Python Service Layer
+### 4. Next.js Service Layer
 
-#### Install Python dependencies:
+#### Install additional Node.js dependencies:
 ```bash
-pip install fastapi uvicorn sqlite3 pyyaml python-multipart
+npm install sqlite sqlite3 yaml
 ```
 
 #### Create service layer files:
-- `python/services/agent_service.py` - Core agent management service
-- `python/services/smalltalk_bridge.py` - SmallTalk integration layer
-- `python/api/agent_routes.py` - FastAPI route handlers
-- `python/main.py` - FastAPI application entry point
+- `lib/agent-service.ts` - Core SmallTalk integration service
+- `lib/python-agent-client.ts` - Python service client (optional)
+- `app/api/agents/` - Next.js API routes for agent management
 
-### 5. Next.js Integration
+### 5. Python Service Layer (Optional)
 
-#### Install additional dependencies:
+#### Install Python dependencies:
 ```bash
-npm install yaml js-yaml
+pip install -r python/requirements-agents.txt
 ```
 
-#### Create UI components:
-- Enhanced sidebar with agent management section
-- Agent configuration modal with YAML editor
-- Agent status indicators and controls
-- Team orchestration interface
+#### Python service files:
+- `python/services/agent_service.py` - Optional Python processing service
+- `python/requirements-agents.txt` - Python dependencies
 
-### 6. Configuration Files
+### 6. Environment Configuration
 
 #### Environment variables needed:
 ```bash
 # Add to .env.local
-AGENT_SERVICE_URL=http://localhost:8001
+PYTHON_AGENT_SERVICE_URL=http://localhost:8001  # Optional Python service
 SMALLTALK_CONFIG_PATH=./configs
 DATABASE_PATH=./data/research_memory.db
 ```
