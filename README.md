@@ -95,6 +95,14 @@ Build complex automation workflows with:
 - **Real-time Monitoring** - Track workflow execution and performance
 - **Team Collaboration** - Share and collaborate on workflows
 
+<div align="center">
+
+![Template Gallery](docs/visual-assets/screenshots/07-workflow-template-gallery.png)
+
+*Comprehensive template library with 5 workflow types: Research & Analysis, Content Creation, Customer Support, Data Analysis, and General Purpose*
+
+</div>
+
 ### 🛠️ **Professional Control Panel**
 
 <div align="center">
