@@ -63,7 +63,9 @@ export class SmallTalkAPIServer {
       complexity: 'intermediate',
       taskTypes: ['research', 'analysis', 'questions'],
       contextAwareness: 0.9,
-      collaborationStyle: 'analytical'
+      collaborationStyle: 'independent',
+      tools: [],
+      personalityTraits: ['analytical', 'helpful', 'thorough']
     });
 
     this.app.addAgent(codingAgent, {
@@ -71,7 +73,9 @@ export class SmallTalkAPIServer {
       complexity: 'advanced', 
       taskTypes: ['coding', 'debugging', 'technical'],
       contextAwareness: 0.9,
-      collaborationStyle: 'technical'
+      collaborationStyle: 'leading',
+      tools: [],
+      personalityTraits: ['precise', 'logical', 'detail-oriented']
     });
 
     this.app.addAgent(conversationAgent, {
@@ -79,7 +83,9 @@ export class SmallTalkAPIServer {
       complexity: 'basic',
       taskTypes: ['conversation', 'management', 'facilitation'], 
       contextAwareness: 0.8,
-      collaborationStyle: 'supportive'
+      collaborationStyle: 'supportive',
+      tools: [],
+      personalityTraits: ['empathetic', 'patient', 'collaborative']
     });
   }
 
