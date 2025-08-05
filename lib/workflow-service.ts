@@ -441,7 +441,8 @@ export class CrawlplexityWorkflowService {
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      await this.updateExecutionStatus(executionId, 'failed', undefined, error.message, duration);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await this.updateExecutionStatus(executionId, 'failed', undefined, errorMessage, duration);
       throw error;
     }
   }
@@ -741,7 +742,7 @@ export class CrawlplexityWorkflowService {
     
     try {
       const updates = ['status = ?'];
-      const params = [status];
+      const params: any[] = [status];
 
       if (status === 'completed' || status === 'failed') {
         updates.push('completed_at = datetime("now")');
@@ -768,7 +769,7 @@ export class CrawlplexityWorkflowService {
         UPDATE workflow_executions 
         SET ${updates.join(', ')}
         WHERE execution_id = ?
-      `).run(params);
+      `).run(...params);
     } finally {
       db.close();
     }
