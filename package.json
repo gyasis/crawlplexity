@@ -32,7 +32,7 @@
     "react-markdown": "^10.1.0",
     "redis": "^5.6.1",
     "remark-gfm": "^4.0.1",
-    "smalltalk-ai": "^0.2.5",
+    "smalltalk-ai": "^0.2.6",
     "sonner": "^1.7.2",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
