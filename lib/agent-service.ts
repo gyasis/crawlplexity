@@ -195,6 +195,23 @@ export class CrawlplexityAgentService {
       await this.initialize();
     }
 
+    // Check if the message starts with an entity name (e.g., "analysis can you gather data...")
+    const firstWord = message.split(' ')[0].toLowerCase();
+    const entity = await this.resolveEntityName(firstWord);
+    
+    if (entity.type === 'team' && entity.id) {
+      // Route to team, remove the team name from the message
+      const messageWithoutTeamName = message.substring(firstWord.length).trim();
+      console.log(`[AgentService] Routing to team: ${entity.id}`);
+      return this.chatWithAgentGroup(entity.id, messageWithoutTeamName, sessionId, userId);
+    } else if (entity.type === 'agent' && entity.id) {
+      // Route to specific agent, remove the agent name from the message
+      const messageWithoutAgentName = message.substring(firstWord.length).trim();
+      console.log(`[AgentService] Routing to agent: ${entity.id}`);
+      return this.chatWithAgent(entity.id, messageWithoutAgentName, sessionId, userId);
+    }
+
+    // No specific entity found, use orchestration
     try {
       const response = await fetch(`${this.smalltalkApiUrl}/api/chat`, {
         method: 'POST',
@@ -354,6 +371,12 @@ export class CrawlplexityAgentService {
     const agentId = manifest.config.name.toLowerCase().replace(/\s+/g, '-');
     const manifestPath = join(this.configPath, 'agents', `${agentId}.yaml`);
     
+    // Check for naming conflicts with existing agents and teams
+    const nameConflict = await this.checkNameConflict(manifest.config.name, 'agent');
+    if (nameConflict) {
+      throw new Error(nameConflict);
+    }
+    
     try {
       // Save manifest to file as simple YAML
       const yamlContent = this.manifestToYaml(manifest);
@@ -497,6 +520,90 @@ export class CrawlplexityAgentService {
     return this.getOrchestrationStats();
   }
 
+  // Check for naming conflicts across agents and teams
+  async checkNameConflict(name: string, entityType: 'agent' | 'team'): Promise<string | null> {
+    const db = this.getDatabase();
+    
+    try {
+      const normalizedName = name.toLowerCase().replace(/\s+/g, '-');
+      
+      // Check for existing agent with same name
+      const existingAgent = db.prepare(`
+        SELECT agent_id, name FROM agents 
+        WHERE LOWER(REPLACE(name, ' ', '-')) = ? OR agent_id = ?
+      `).get([normalizedName, normalizedName]);
+      
+      // Check for existing team with same name
+      const existingTeam = db.prepare(`
+        SELECT id, name FROM agent_teams 
+        WHERE LOWER(REPLACE(name, ' ', '-')) = ?
+      `).get([normalizedName]);
+      
+      if (entityType === 'agent' && existingAgent) {
+        return `An agent with the name "${name}" already exists. Please choose a different name.`;
+      }
+      
+      if (entityType === 'agent' && existingTeam) {
+        return `A team with the name "${name}" already exists. Agent and team names must be unique to avoid routing conflicts.`;
+      }
+      
+      if (entityType === 'team' && existingTeam) {
+        return `A team with the name "${name}" already exists. Please choose a different name.`;
+      }
+      
+      if (entityType === 'team' && existingAgent) {
+        return `An agent with the name "${name}" already exists. Team and agent names must be unique to avoid routing conflicts.`;
+      }
+      
+      return null; // No conflict
+    } finally {
+      db.close();
+    }
+  }
+
+  // Resolve a name to either an agent or team
+  async resolveEntityName(name: string): Promise<{ type: 'agent' | 'team' | 'none'; id: string | null }> {
+    const db = this.getDatabase();
+    
+    try {
+      const normalizedName = name.toLowerCase().replace(/\s+/g, '-');
+      
+      // Try exact match first for agents
+      const agent = db.prepare(`
+        SELECT agent_id FROM agents 
+        WHERE agent_id = ? OR LOWER(name) = LOWER(?)
+      `).get([normalizedName, name]);
+      
+      if (agent) {
+        return { type: 'agent', id: agent.agent_id };
+      }
+      
+      // Try exact match for teams
+      const team = db.prepare(`
+        SELECT id FROM agent_teams 
+        WHERE LOWER(REPLACE(name, ' ', '-')) = ? OR LOWER(name) = LOWER(?)
+      `).get([normalizedName, name]);
+      
+      if (team) {
+        return { type: 'team', id: team.id };
+      }
+      
+      // Try fuzzy match for teams (e.g., "analysis" matches "Analysis Team")
+      const fuzzyTeam = db.prepare(`
+        SELECT id FROM agent_teams 
+        WHERE LOWER(name) LIKE LOWER(?)
+      `).get([`%${name}%`]);
+      
+      if (fuzzyTeam) {
+        return { type: 'team', id: fuzzyTeam.id };
+      }
+      
+      return { type: 'none', id: null };
+    } finally {
+      db.close();
+    }
+  }
+
   // Agent Group Management
   async getAgentGroups(): Promise<any[]> {
     const db = this.getDatabase();
@@ -526,6 +633,12 @@ export class CrawlplexityAgentService {
   }
 
   async createAgentGroup(group: { name: string; description?: string; agents: string[] }): Promise<string> {
+    // Check for naming conflicts with existing agents and teams
+    const nameConflict = await this.checkNameConflict(group.name, 'team');
+    if (nameConflict) {
+      throw new Error(nameConflict);
+    }
+    
     const db = this.getDatabase();
     
     const transaction = db.transaction(() => {
