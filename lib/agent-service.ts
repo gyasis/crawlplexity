@@ -535,7 +535,7 @@ export class CrawlplexityAgentService {
       
       // Check for existing team with same name
       const existingTeam = db.prepare(`
-        SELECT id, name FROM agent_teams 
+        SELECT team_id, name FROM agent_teams 
         WHERE LOWER(REPLACE(name, ' ', '-')) = ?
       `).get([normalizedName]);
       
@@ -580,22 +580,22 @@ export class CrawlplexityAgentService {
       
       // Try exact match for teams
       const team = db.prepare(`
-        SELECT id FROM agent_teams 
+        SELECT team_id FROM agent_teams 
         WHERE LOWER(REPLACE(name, ' ', '-')) = ? OR LOWER(name) = LOWER(?)
       `).get([normalizedName, name]);
       
       if (team) {
-        return { type: 'team', id: team.id };
+        return { type: 'team', id: team.team_id };
       }
       
       // Try fuzzy match for teams (e.g., "analysis" matches "Analysis Team")
       const fuzzyTeam = db.prepare(`
-        SELECT id FROM agent_teams 
+        SELECT team_id FROM agent_teams 
         WHERE LOWER(name) LIKE LOWER(?)
       `).get([`%${name}%`]);
       
       if (fuzzyTeam) {
-        return { type: 'team', id: fuzzyTeam.id };
+        return { type: 'team', id: fuzzyTeam.team_id };
       }
       
       return { type: 'none', id: null };
@@ -642,13 +642,14 @@ export class CrawlplexityAgentService {
     const db = this.getDatabase();
     
     const transaction = db.transaction(() => {
-      // Create the team
-      const result = db.prepare(`
-        INSERT INTO agent_teams (name, description)
-        VALUES (?, ?)
-      `).run([group.name, group.description || null]);
+      // Generate team ID from name
+      const teamId = group.name.toLowerCase().replace(/\s+/g, '-') + '-team';
       
-      const teamId = result.lastInsertRowid.toString();
+      // Create the team
+      db.prepare(`
+        INSERT INTO agent_teams (team_id, name, description)
+        VALUES (?, ?, ?)
+      `).run([teamId, group.name, group.description || null]);
       
       // Add team members
       const insertMember = db.prepare(`
