@@ -240,24 +240,62 @@ export class CrawlplexityAgentService {
     }
 
     try {
-      // For specific agent, we'll prefix the message to indicate agent preference
-      const agentMessage = `/agent ${agentId} ${message}`;
+      const effectiveSessionId = sessionId || 'default';
       
-      const response = await fetch(`${this.smalltalkApiUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: agentMessage,
-          sessionId: sessionId || 'default'
-        })
-      });
+      // Check if there's actual message content to process
+      const hasMessage = message && message.trim().length > 0;
+      
+      if (hasMessage) {
+        // Two-step process: First switch agent, then send message
+        
+        // Step 1: Switch to the agent
+        const switchResponse = await fetch(`${this.smalltalkApiUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: `/agent ${agentId}`,
+            sessionId: effectiveSessionId
+          })
+        });
 
-      if (!response.ok) {
-        throw new Error(`SmallTalk API error: ${response.status}`);
+        if (!switchResponse.ok) {
+          throw new Error(`SmallTalk API error during agent switch: ${switchResponse.status}`);
+        }
+
+        // Step 2: Send the actual message content
+        const messageResponse = await fetch(`${this.smalltalkApiUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: message,
+            sessionId: effectiveSessionId
+          })
+        });
+
+        if (!messageResponse.ok) {
+          throw new Error(`SmallTalk API error during message processing: ${messageResponse.status}`);
+        }
+
+        const data = await messageResponse.json();
+        return data.response || 'No response from SmallTalk';
+      } else {
+        // Just switch agent if no message content
+        const response = await fetch(`${this.smalltalkApiUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: `/agent ${agentId}`,
+            sessionId: effectiveSessionId
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`SmallTalk API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.response || 'No response from SmallTalk';
       }
-
-      const data = await response.json();
-      return data.response || 'No response from SmallTalk';
     } catch (error) {
       console.error(`[AgentService] Chat with agent ${agentId} failed:`, error);
       throw error;
