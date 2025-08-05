@@ -1,111 +1,65 @@
 'use client'
 
-import { Search, Loader2, Microscope, Bot } from 'lucide-react'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { useState } from 'react'
+import { UnifiedChatInput } from '@/components/chat/UnifiedChatInput'
+
+interface Agent {
+  agent_id: string
+  name: string
+  description?: string
+  status: 'idle' | 'running' | 'stopped' | 'error'
+  agent_type?: string
+}
+
+interface AgentGroup {
+  id: string
+  name: string
+  description?: string
+  agents: string[]
+  active: boolean
+}
 
 interface SearchComponentProps {
-  handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void
-  input: string
-  handleInputChange: (e: React.ChangeEvent<HTMLInputElement> | React.ChangeEvent<HTMLTextAreaElement>) => void
+  onSubmit: (query: string) => void
   isLoading: boolean
-  onDeepResearchToggle?: (enabled: boolean) => void
-  deepResearchEnabled?: boolean
-  onAgentModeToggle?: (enabled: boolean) => void
-  agentModeEnabled?: boolean
+  // Agent management props
+  activeAgents?: Agent[]
+  activeGroups?: AgentGroup[]
+  availableAgents?: Agent[]
+  availableGroups?: AgentGroup[]
+  onAddAgent?: (agent: Agent) => void
+  onRemoveAgent?: (agentId: string) => void
+  onAddGroup?: (group: AgentGroup) => void
+  onRemoveGroup?: (groupId: string) => void
 }
 
 export function SearchComponent({ 
-  handleSubmit, 
-  input, 
-  handleInputChange, 
+  onSubmit, 
   isLoading,
-  onDeepResearchToggle,
-  deepResearchEnabled = false,
-  onAgentModeToggle,
-  agentModeEnabled = false
+  activeAgents = [],
+  activeGroups = [],
+  availableAgents = [],
+  availableGroups = [],
+  onAddAgent,
+  onRemoveAgent,
+  onAddGroup,
+  onRemoveGroup
 }: SearchComponentProps) {
-  const [localDeepResearch, setLocalDeepResearch] = useState(deepResearchEnabled)
-  const [localAgentMode, setLocalAgentMode] = useState(agentModeEnabled)
-
-  const handleToggle = () => {
-    const newValue = !localDeepResearch
-    setLocalDeepResearch(newValue)
-    onDeepResearchToggle?.(newValue)
-  }
-
-  const handleAgentToggle = () => {
-    const newValue = !localAgentMode
-    setLocalAgentMode(newValue)
-    onAgentModeToggle?.(newValue)
-  }
-
   return (
     <div className="max-w-4xl mx-auto pt-12">
-      <form onSubmit={handleSubmit}>
-        <div className="relative flex items-center">
-          <Input
-            type="text"
-            value={input}
-            onChange={handleInputChange}
-            placeholder="Ask anything..."
-            className="pr-24 h-14 text-lg rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-zinc-800 transition-colors"
-            disabled={isLoading}
-          />
-          <Button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            variant="orange"
-            className="absolute right-2 rounded-lg"
-          >
-            {isLoading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Search className="h-5 w-5" />
-            )}
-          </Button>
-        </div>
-      </form>
-      
-      {/* Search Mode Toggles */}
-      <div className="mt-3 flex flex-col items-center gap-2">
-        <div className="flex items-center justify-center gap-2">
-          <button
-            type="button"
-            onClick={handleToggle}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-              localDeepResearch 
-                ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-700' 
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-700'
-            }`}
-          >
-            <Microscope className="h-4 w-4" />
-            <span>Deep Research {localDeepResearch ? 'ON' : 'OFF'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={handleAgentToggle}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-              localAgentMode 
-                ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 border border-orange-300 dark:border-orange-700' 
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border border-gray-300 dark:border-gray-700'
-            }`}
-          >
-            <Bot className="h-4 w-4" />
-            <span>Agent Mode {localAgentMode ? 'ON' : 'OFF'}</span>
-          </button>
-        </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400 text-center">
-          {localDeepResearch ? '4-phase comprehensive analysis' : 
-           localAgentMode ? 'SmallTalk agent orchestration' : 'Regular search'}
-        </div>
-      </div>
-      
-      {/* Slash Commands Help */}
-      <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
-        Commands: /research, /research-quick, /research-trends, /agents, /agent
-      </div>
+      <UnifiedChatInput 
+        onSubmit={onSubmit}
+        placeholder="Ask anything..."
+        disabled={isLoading}
+        className=""
+        activeAgents={activeAgents}
+        activeGroups={activeGroups}
+        availableAgents={availableAgents}
+        availableGroups={availableGroups}
+        onAddAgent={onAddAgent}
+        onRemoveAgent={onRemoveAgent}
+        onAddGroup={onAddGroup}
+        onRemoveGroup={onRemoveGroup}
+      />
     </div>
   )
 }

@@ -4,11 +4,13 @@ import { getAgentService } from '@/lib/agent-service';
 // GET /api/agents/[agentId] - Get specific agent details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { agentId: string } }
+  { params }: { params: Promise<{ agentId: string }> }
 ) {
+  const resolvedParams = await params;
+  
   try {
     const agentService = getAgentService();
-    const agent = await agentService.getAgentStatus(params.agentId);
+    const agent = await agentService.getAgentStatus(resolvedParams.agentId);
     
     if (!agent) {
       return NextResponse.json(
@@ -25,7 +27,7 @@ export async function GET(
       data: agent
     });
   } catch (error) {
-    console.error(`[API] Failed to get agent ${params.agentId}:`, error);
+    console.error(`[API] Failed to get agent ${resolvedParams.agentId}:`, error);
     return NextResponse.json(
       { 
         success: false, 
@@ -40,8 +42,10 @@ export async function GET(
 // PUT /api/agents/[agentId] - Update agent status or full agent
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { agentId: string } }
+  { params }: { params: Promise<{ agentId: string }> }
 ) {
+  const resolvedParams = await params;
+  
   try {
     const data = await request.json();
     const agentService = getAgentService();
@@ -58,18 +62,18 @@ export async function PUT(
         );
       }
 
-      await agentService.updateAgentStatus(params.agentId, data.status);
+      await agentService.updateAgentStatus(resolvedParams.agentId, data.status);
       
       return NextResponse.json({
         success: true,
-        message: `Agent ${params.agentId} status updated to ${data.status}`
+        message: `Agent ${resolvedParams.agentId} status updated to ${data.status}`
       });
     }
     
     // Full agent update - recreate the agent
     if (data.config?.name) {
       // Delete existing agent
-      await agentService.deleteAgent(params.agentId);
+      await agentService.deleteAgent(resolvedParams.agentId);
       
       // Create new agent with updated data
       const newAgentId = await agentService.createAgent(data);
@@ -77,7 +81,7 @@ export async function PUT(
       return NextResponse.json({
         success: true,
         data: { agent_id: newAgentId },
-        message: `Agent ${params.agentId} updated successfully`
+        message: `Agent ${resolvedParams.agentId} updated successfully`
       });
     }
     
@@ -90,7 +94,7 @@ export async function PUT(
     );
     
   } catch (error) {
-    console.error(`[API] Failed to update agent ${params.agentId}:`, error);
+    console.error(`[API] Failed to update agent ${resolvedParams.agentId}:`, error);
     return NextResponse.json(
       { 
         success: false, 
@@ -105,18 +109,20 @@ export async function PUT(
 // DELETE /api/agents/[agentId] - Delete agent
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { agentId: string } }
+  { params }: { params: Promise<{ agentId: string }> }
 ) {
+  const resolvedParams = await params;
+  
   try {
     const agentService = getAgentService();
-    await agentService.deleteAgent(params.agentId);
+    await agentService.deleteAgent(resolvedParams.agentId);
     
     return NextResponse.json({
       success: true,
-      message: `Agent ${params.agentId} deleted successfully`
+      message: `Agent ${resolvedParams.agentId} deleted successfully`
     });
   } catch (error) {
-    console.error(`[API] Failed to delete agent ${params.agentId}:`, error);
+    console.error(`[API] Failed to delete agent ${resolvedParams.agentId}:`, error);
     return NextResponse.json(
       { 
         success: false, 

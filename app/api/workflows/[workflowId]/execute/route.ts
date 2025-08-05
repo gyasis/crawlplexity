@@ -4,14 +4,15 @@ import { getWorkflowService } from '@/lib/workflow-service';
 // POST /api/workflows/[workflowId]/execute - Execute workflow
 export async function POST(
   request: NextRequest,
-  { params }: { params: { workflowId: string } }
+  { params }: { params: Promise<{ workflowId: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const executionData = await request.json();
     
     const workflowService = getWorkflowService();
     const executionId = await workflowService.executeWorkflow(
-      params.workflowId,
+      resolvedParams.workflowId,
       executionData.inputData || {},
       executionData.sessionId,
       executionData.userId
@@ -38,16 +39,17 @@ export async function POST(
 // GET /api/workflows/[workflowId]/execute - Get execution history
 export async function GET(
   request: NextRequest,
-  { params }: { params: { workflowId: string } }
+  { params }: { params: Promise<{ workflowId: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const searchParams = request.nextUrl.searchParams;
     const limit = parseInt(searchParams.get('limit') || '20');
     const status = searchParams.get('status');
 
     const workflowService = getWorkflowService();
     const executions = await workflowService.getWorkflowExecutions(
-      params.workflowId,
+      resolvedParams.workflowId,
       { limit, status }
     );
     

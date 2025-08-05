@@ -23,7 +23,7 @@ export interface SearchResult {
 }
 
 export interface StreamEvent {
-  type: 'status' | 'sources' | 'text' | 'content' | 'ticker' | 'follow_up_questions' | 'metrics' | 'complete' | 'completed' | 'error' | 'warning' | 'debug_event'
+  type: 'status' | 'sources' | 'text' | 'content' | 'ticker' | 'follow_up_questions' | 'metrics' | 'complete' | 'completed' | 'error' | 'warning' | 'debug_event' | 'agents_status'
   message?: string
   sources?: SearchResult[]
   content?: string
@@ -37,6 +37,7 @@ export interface StreamEvent {
   timestamp?: string
   data?: any
   debugType?: string
+  agents?: any[]
   [key: string]: any
 }
 

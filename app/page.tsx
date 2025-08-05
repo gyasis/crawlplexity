@@ -9,6 +9,8 @@ import { useCrawlplexityChat } from './hooks/use-crawlplexity-chat'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Sidebar } from '@/components/sidebar/Sidebar'
 import { useSidebar } from '@/contexts/SidebarContext'
+import { useMode } from '@/contexts/ModeContext'
+import { UnifiedChatInput } from '@/components/chat/UnifiedChatInput'
 import { GeminiKeyWarning } from '@/components/ui/gemini-key-warning'
 import { DeepResearchFallback } from '@/components/ui/deep-research-fallback'
 import { ModelStatusIndicator } from '@/components/ui/model-status-indicator'
@@ -22,29 +24,36 @@ interface MessageData {
 }
 
 export default function CrawlplexityPage() {
+  // Core app state
   const [searchStatus, setSearchStatus] = useState('')
   const [hasSearched, setHasSearched] = useState(false)
   const [messageData, setMessageData] = useState<Map<number, MessageData>>(new Map())
   const currentMessageIndex = useRef(0)
-  const [input, setInput] = useState('')
   const [showGeminiWarning, setShowGeminiWarning] = useState(false)
-  const [deepResearchEnabled, setDeepResearchEnabled] = useState(false)
   const [showDeepResearchFallback, setShowDeepResearchFallback] = useState(false)
   const [deepResearchError, setDeepResearchError] = useState<string>('')
   const [deepResearchDetails, setDeepResearchDetails] = useState<string[]>([])
   const [showModelStatus, setShowModelStatus] = useState(false)
-  const [agentModeEnabled, setAgentModeEnabled] = useState(false)
   const [selectedAgentId, setSelectedAgentId] = useState<string | undefined>(undefined)
   
-  // Seamless mode switching state
-  const [currentChatMode, setCurrentChatMode] = useState<'search' | 'deep-research' | 'agents' | 'agent-groups'>('search')
+  // Agent state
   const [activeAgents, setActiveAgents] = useState<any[]>([])
   const [activeGroups, setActiveGroups] = useState<any[]>([])
   const [availableAgents, setAvailableAgents] = useState<any[]>([])
   const [availableGroups, setAvailableGroups] = useState<any[]>([])
   
-  // Sidebar context
+  // Context hooks - UNIFIED MODE SYSTEM! 🔥
   const { sidebarState } = useSidebar()
+  const { 
+    currentMode, 
+    switchMode, 
+    deepResearchEnabled, 
+    agentModeEnabled,
+    isResearching,
+    setIsResearching,
+    researchProgress,
+    setResearchProgress
+  } = useMode()
 
   // Use our custom Crawlplexity chat hook
   const {
@@ -61,8 +70,8 @@ export default function CrawlplexityPage() {
 
   // Deep Research hook
   const {
-    isResearching,
-    researchProgress,
+    isResearching: deepResearchIsResearching,
+    researchProgress: deepResearchProgress,
     currentSessionId,
     researchSessions,
     error: researchError,
@@ -138,101 +147,7 @@ export default function CrawlplexityPage() {
     }
   }, [deepResearchStatus])
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setInput(e.target.value)
-  }
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading || isResearching) return
-
-    const query = input.trim()
-    setInput('')
-    setHasSearched(true)
-
-    // Check for slash commands
-    if (query.startsWith('/')) {
-      await handleSlashCommand(query)
-      return
-    }
-
-    // Handle different modes based on currentChatMode
-    switch (currentChatMode) {
-      case 'deep-research':
-        setSearchStatus('Starting deep research...')
-        toast.info('🔬 Starting Deep Research - enhanced multi-phase analysis')
-        
-        try {
-          setShowModelStatus(true)
-          await append({
-            role: 'user',
-            content: query
-          }, { 
-            deepResearch: true, 
-            researchType: 'comprehensive' 
-          })
-          return
-        } catch (error) {
-          // Handle Deep Research failure - fall back to regular search
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-          setDeepResearchError(errorMessage)
-          
-          if (errorMessage.includes('Setup required:')) {
-            const instructions = errorMessage.split('Setup required:')[1]?.split('\n').filter(line => line.trim())
-            setDeepResearchDetails(instructions || [])
-          }
-          
-          setShowDeepResearchFallback(true)
-          toast.error('Deep Research unavailable - falling back to regular search')
-          setCurrentChatMode('search')
-        }
-        break
-
-      case 'agents':
-        setSearchStatus('Starting agent orchestration...')
-        if (activeAgents.length === 1) {
-          toast.info(`🤖 Using agent: ${activeAgents[0].name}`)
-        } else if (activeAgents.length > 1) {
-          toast.info(`🤖 Using ${activeAgents.length} agents with orchestration`)
-        } else {
-          toast.info('🤖 Using SmallTalk agent orchestration')
-        }
-        setShowModelStatus(true)
-        await append({
-          role: 'user',
-          content: query
-        }, { 
-          useAgents: true, 
-          agentId: activeAgents.length === 1 ? activeAgents[0].agent_id : undefined
-        })
-        return
-
-      case 'agent-groups':
-        setSearchStatus('Starting agent group collaboration...')
-        const groupNames = activeGroups.map(g => g.name).join(', ')
-        toast.info(`🤖 Using agent groups: ${groupNames}`)
-        setShowModelStatus(true)
-        await append({
-          role: 'user',
-          content: query
-        }, { 
-          useAgents: true,
-          groupId: activeGroups[0]?.id
-        })
-        return
-
-      case 'search':
-      default:
-        // Regular search
-        setSearchStatus('Starting search...')
-        setShowModelStatus(true)
-        await append({
-          role: 'user',
-          content: query
-        })
-        break
-    }
-  }
 
   // Handle slash commands
   const handleSlashCommand = async (command: string) => {
@@ -283,7 +198,7 @@ export default function CrawlplexityPage() {
       case '/agents':
         if (!args.trim()) {
           toast.info('🤖 Agent mode enabled - SmallTalk will orchestrate agent selection')
-          setAgentModeEnabled(true)
+          switchMode('agents')
           return
         }
         toast.info('🤖 Using SmallTalk agent orchestration')
@@ -319,7 +234,7 @@ export default function CrawlplexityPage() {
     if (!activeAgents.find(a => a.agent_id === agent.agent_id)) {
       const newActiveAgents = [...activeAgents, agent]
       setActiveAgents(newActiveAgents)
-      setCurrentChatMode('agents')
+      switchMode('agents')
     }
   }
 
@@ -328,16 +243,36 @@ export default function CrawlplexityPage() {
     setActiveAgents(newActiveAgents)
     
     // If no agents left and mode is agents, switch to search
-    if (newActiveAgents.length === 0 && currentChatMode === 'agents') {
-      setCurrentChatMode('search')
+    if (newActiveAgents.length === 0 && currentMode === 'agents') {
+      switchMode('search')
     }
   }
 
-  const handleAddGroup = (group: any) => {
+  const handleAddGroup = async (group: any) => {
     if (!activeGroups.find(g => g.id === group.id)) {
       const newActiveGroups = [...activeGroups, group]
       setActiveGroups(newActiveGroups)
-      setCurrentChatMode('agent-groups')
+      
+      // Auto-activate all agents in the team
+      if (group.agents && Array.isArray(group.agents)) {
+        const teamAgents = group.agents
+          .map((agentId: string) => availableAgents.find(a => a.agent_id === agentId))
+          .filter(Boolean)
+        
+        // Add all team agents to active agents
+        const newActiveAgents = [...activeAgents]
+        teamAgents.forEach((agent: any) => {
+          if (!newActiveAgents.find(a => a.agent_id === agent.agent_id)) {
+            newActiveAgents.push(agent)
+          }
+        })
+        setActiveAgents(newActiveAgents)
+        
+        // Show which team was activated
+        toast.success(`🎯 Activated ${group.name} with ${teamAgents.length} agents`)
+      }
+      
+      switchMode('agent-groups')
     }
   }
 
@@ -346,56 +281,106 @@ export default function CrawlplexityPage() {
     setActiveGroups(newActiveGroups)
     
     // If no groups left and mode is agent-groups, switch to search
-    if (newActiveGroups.length === 0 && currentChatMode === 'agent-groups') {
-      setCurrentChatMode('search')
+    if (newActiveGroups.length === 0 && currentMode === 'agent-groups') {
+      switchMode('search')
     }
   }
 
+  // 🔥 UNIFIED MODE HANDLERS - no more fragmented state!
   const handleModeSwitch = (mode: 'search' | 'deep-research' | 'agents' | 'agent-groups') => {
-    setCurrentChatMode(mode)
-    
-    // Update the existing flags for backward compatibility
-    if (mode === 'deep-research') {
-      setDeepResearchEnabled(true)
-      setAgentModeEnabled(false)
-    } else if (mode === 'agents' || mode === 'agent-groups') {
-      setDeepResearchEnabled(false)
-      setAgentModeEnabled(true)
-    } else {
-      setDeepResearchEnabled(false)
-      setAgentModeEnabled(false)
-    }
+    console.log(`🚀 Unified mode switch: ${currentMode} → ${mode}`)
+    switchMode(mode)
   }
 
 
-  const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (!input.trim()) return
-    
+  const handleDirectSubmit = async (query: string) => {
+    if (!query.trim() || isLoading || isResearching) return
+
     setHasSearched(true)
-    // Note: Our custom hook handles clearing data automatically
-    handleSubmit(e)
-  }
-  
-  // Wrapped submit handler for chat interface
-  const handleChatSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    // Store current data in messageData before clearing
-    if (messages.length > 0 && sources.length > 0) {
-      const assistantMessages = messages.filter(m => m.role === 'assistant')
-      const lastAssistantIndex = assistantMessages.length - 1
-      if (lastAssistantIndex >= 0) {
-        const newMap = new Map(messageData)
-        newMap.set(lastAssistantIndex, {
-          sources: sources,
-          followUpQuestions: followUpQuestions,
-          ticker: currentTicker || undefined
-        })
-        setMessageData(newMap)
-      }
+    // Input is managed by UnifiedChatInput
+
+    // Check for slash commands
+    if (query.startsWith('/')) {
+      await handleSlashCommand(query)
+      return
     }
-    
-    // Note: Our custom hook handles clearing data automatically
-    handleSubmit(e)
+
+    // Handle different modes based on currentMode
+    switch (currentMode) {
+      case 'deep-research':
+        setSearchStatus('Starting deep research...')
+        toast.info('🔬 Starting Deep Research - enhanced multi-phase analysis')
+        
+        try {
+          setShowModelStatus(true)
+          await append({
+            role: 'user',
+            content: query
+          }, { 
+            deepResearch: true, 
+            researchType: 'comprehensive' 
+          })
+          return
+        } catch (error) {
+          // Handle Deep Research failure - fall back to regular search
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+          setDeepResearchError(errorMessage)
+          
+          if (errorMessage.includes('Setup required:')) {
+            const instructions = errorMessage.split('Setup required:')[1]?.split('\n').filter(line => line.trim())
+            setDeepResearchDetails(instructions || [])
+          }
+          
+          setShowDeepResearchFallback(true)
+          toast.error('Deep Research unavailable - falling back to regular search')
+          switchMode('search')
+        }
+        break
+
+      case 'agents':
+        setSearchStatus('Starting agent orchestration...')
+        if (activeAgents.length === 1) {
+          toast.info(`🤖 Using agent: ${activeAgents[0].name}`)
+        } else if (activeAgents.length > 1) {
+          toast.info(`🤖 Using ${activeAgents.length} agents with orchestration`)
+        } else {
+          toast.info('🤖 Using SmallTalk agent orchestration')
+        }
+        setShowModelStatus(true)
+        await append({
+          role: 'user',
+          content: query
+        }, { 
+          useAgents: true, 
+          agentId: activeAgents.length === 1 ? activeAgents[0].agent_id : undefined
+        })
+        return
+
+      case 'agent-groups':
+        setSearchStatus('Starting agent group collaboration...')
+        const groupNames = activeGroups.map(g => g.name).join(', ')
+        toast.info(`🤖 Using agent groups: ${groupNames}`)
+        setShowModelStatus(true)
+        await append({
+          role: 'user',
+          content: query
+        }, { 
+          useAgents: true,
+          agentId: activeGroups[0]?.id
+        })
+        return
+
+      case 'search':
+      default:
+        // Regular search
+        setSearchStatus('Starting search...')
+        setShowModelStatus(true)
+        await append({
+          role: 'user',
+          content: query
+        })
+        break
+    }
   }
 
   const isChatActive = hasSearched || messages.length > 0
@@ -422,7 +407,6 @@ export default function CrawlplexityPage() {
               <Button
                 onClick={() => {
                   setHasSearched(false)
-                  setInput('')
                   setMessageData(new Map())
                   currentMessageIndex.current = 0
                   window.location.reload()
@@ -464,14 +448,16 @@ export default function CrawlplexityPage() {
         <div className="max-w-7xl mx-auto h-full">
           {!isChatActive ? (
             <SearchComponent 
-              handleSubmit={handleSearch}
-              input={input}
-              handleInputChange={handleInputChange}
+              onSubmit={handleDirectSubmit}
               isLoading={isLoading || isResearching}
-              onDeepResearchToggle={setDeepResearchEnabled}
-              deepResearchEnabled={deepResearchEnabled}
-              onAgentModeToggle={setAgentModeEnabled}
-              agentModeEnabled={agentModeEnabled}
+              activeAgents={activeAgents}
+              activeGroups={activeGroups}
+              availableAgents={availableAgents}
+              availableGroups={availableGroups}
+              onAddAgent={handleAddAgent}
+              onRemoveAgent={handleRemoveAgent}
+              onAddGroup={handleAddGroup}
+              onRemoveGroup={handleRemoveGroup}
             />
           ) : (
             <ChatInterface 
@@ -480,20 +466,16 @@ export default function CrawlplexityPage() {
               followUpQuestions={followUpQuestions}
               searchStatus={searchStatus}
               isLoading={isLoading}
-              input={input}
-              handleInputChange={handleInputChange}
-              handleSubmit={handleChatSubmit}
+              onSubmit={handleDirectSubmit}
               messageData={messageData}
               currentTicker={currentTicker}
               deepResearchStatus={deepResearchStatus}
               researchProgress={researchProgress}
-              onDeepResearchToggle={setDeepResearchEnabled}
-              deepResearchEnabled={deepResearchEnabled}
               activeAgents={activeAgents}
               activeGroups={activeGroups}
               availableAgents={availableAgents}
               availableGroups={availableGroups}
-              currentMode={currentChatMode}
+              currentMode={currentMode}
               onAddAgent={handleAddAgent}
               onRemoveAgent={handleRemoveAgent}
               onAddGroup={handleAddGroup}
@@ -544,7 +526,7 @@ export default function CrawlplexityPage() {
         onClose={() => setShowDeepResearchFallback(false)}
         onRetry={async () => {
           // Try to re-enable deep research
-          setDeepResearchEnabled(true)
+          switchMode('deep-research')
           setShowDeepResearchFallback(false)
           toast.info('Deep Research re-enabled - try your search again')
         }}

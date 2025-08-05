@@ -4,14 +4,15 @@ import { getWorkflowService } from '@/lib/workflow-service';
 // POST /api/workflows/templates/[templateId]/instantiate - Create workflow from template
 export async function POST(
   request: NextRequest,
-  { params }: { params: { templateId: string } }
+  { params }: { params: Promise<{ templateId: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const instantiationData = await request.json();
     
     const workflowService = getWorkflowService();
     const workflowId = await workflowService.instantiateWorkflowFromTemplate(
-      params.templateId,
+      resolvedParams.templateId,
       {
         name: instantiationData.name,
         description: instantiationData.description,

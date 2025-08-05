@@ -185,14 +185,12 @@ export function WorkflowStatusIndicators({ isExpanded, isSemiCollapsed }: Workfl
 
   return (
     <div className="space-y-3">
-      {/* Header */}
+      {/* Status and controls */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-          <GitBranch className="w-4 h-4" />
-          <span>Workflows</span>
+        <div className="flex items-center gap-2">
           {(activeExecutions.length > 0 || recentExecutions.length > 0) && (
             <span className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded">
-              {activeExecutions.length + recentExecutions.length}
+              {activeExecutions.length + recentExecutions.length} workflows
             </span>
           )}
         </div>

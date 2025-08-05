@@ -4,11 +4,12 @@ import { getWorkflowService } from '@/lib/workflow-service';
 // GET /api/workflows/[workflowId] - Get specific workflow
 export async function GET(
   request: NextRequest,
-  { params }: { params: { workflowId: string } }
+  { params }: { params: Promise<{ workflowId: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const workflowService = getWorkflowService();
-    const workflow = await workflowService.getWorkflow(params.workflowId);
+    const workflow = await workflowService.getWorkflow(resolvedParams.workflowId);
     
     if (!workflow) {
       return NextResponse.json(
@@ -40,13 +41,14 @@ export async function GET(
 // PUT /api/workflows/[workflowId] - Update workflow
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { workflowId: string } }
+  { params }: { params: Promise<{ workflowId: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const updates = await request.json();
     
     const workflowService = getWorkflowService();
-    await workflowService.updateWorkflow(params.workflowId, updates);
+    await workflowService.updateWorkflow(resolvedParams.workflowId, updates);
     
     return NextResponse.json({
       success: true,
@@ -68,11 +70,12 @@ export async function PUT(
 // DELETE /api/workflows/[workflowId] - Delete workflow
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { workflowId: string } }
+  { params }: { params: Promise<{ workflowId: string }> }
 ) {
   try {
+    const resolvedParams = await params;
     const workflowService = getWorkflowService();
-    await workflowService.deleteWorkflow(params.workflowId);
+    await workflowService.deleteWorkflow(resolvedParams.workflowId);
     
     return NextResponse.json({
       success: true,

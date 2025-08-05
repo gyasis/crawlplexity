@@ -511,7 +511,7 @@ export class CrawlplexityAgentService {
         ORDER BY at.created_at DESC
       `).all();
       
-      return groups.map(group => ({
+      return groups.map((group: any) => ({
         id: group.id,
         name: group.name,
         description: group.description,

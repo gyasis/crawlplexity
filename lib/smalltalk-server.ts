@@ -1,4 +1,4 @@
-import { SmallTalk, WebInterface, createAgent } from '../smalltalk-integration/dist/index';
+import { SmallTalk, WebInterface, createAgent } from 'smalltalk-ai';
 
 export class SmallTalkAPIServer {
   private app: SmallTalk;

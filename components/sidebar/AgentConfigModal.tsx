@@ -185,11 +185,11 @@ export function AgentConfigModal({ isOpen, onClose, onSave, editingAgent }: Agen
     }))
   }
 
-  const addArrayItem = (section: 'capabilities', field: string, value: string) => {
+  const addArrayItem = (section: 'capabilities' | 'metadata', field: string, value: string) => {
     if (!value.trim()) return
     
     setManifest(prev => {
-      const currentArray = prev[section][field] as string[]
+      const currentArray = (prev[section] as any)[field] as string[]
       if (!currentArray.includes(value.trim())) {
         return {
           ...prev,
@@ -205,7 +205,7 @@ export function AgentConfigModal({ isOpen, onClose, onSave, editingAgent }: Agen
 
   const removeArrayItem = (section: 'capabilities' | 'metadata', field: string, index: number) => {
     setManifest(prev => {
-      const currentArray = prev[section][field] as string[]
+      const currentArray = (prev[section] as any)[field] as string[]
       return {
         ...prev,
         [section]: {

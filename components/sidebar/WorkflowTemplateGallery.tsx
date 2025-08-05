@@ -33,6 +33,7 @@ interface WorkflowTemplate {
 interface WorkflowTemplateGalleryProps {
   onClose: () => void
   onSelectTemplate: (template: WorkflowTemplate) => void
+  onRunTemplate?: (template: WorkflowTemplate) => Promise<void>
 }
 
 const CATEGORIES = [
@@ -56,7 +57,7 @@ const ORCHESTRATION_ICONS = {
   hybrid: Zap
 }
 
-export function WorkflowTemplateGallery({ onClose, onSelectTemplate }: WorkflowTemplateGalleryProps) {
+export function WorkflowTemplateGallery({ onClose, onSelectTemplate, onRunTemplate }: WorkflowTemplateGalleryProps) {
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([])
   const [filteredTemplates, setFilteredTemplates] = useState<WorkflowTemplate[]>([])
   const [loading, setLoading] = useState(true)
@@ -64,6 +65,7 @@ export function WorkflowTemplateGallery({ onClose, onSelectTemplate }: WorkflowT
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [selectedComplexity, setSelectedComplexity] = useState<string | null>(null)
   const [expandedTemplate, setExpandedTemplate] = useState<string | null>(null)
+  const [runningTemplate, setRunningTemplate] = useState<string | null>(null)
 
   useEffect(() => {
     loadTemplates()
@@ -119,6 +121,19 @@ export function WorkflowTemplateGallery({ onClose, onSelectTemplate }: WorkflowT
 
   const handleTemplateSelect = (template: WorkflowTemplate) => {
     onSelectTemplate(template)
+  }
+
+  const handleTemplateRun = async (template: WorkflowTemplate) => {
+    if (!onRunTemplate) return
+    
+    setRunningTemplate(template.template_id)
+    try {
+      await onRunTemplate(template)
+    } catch (error) {
+      console.error('Failed to run template:', error)
+    } finally {
+      setRunningTemplate(null)
+    }
   }
 
   const toggleTemplateExpanded = (templateId: string) => {
@@ -292,10 +307,29 @@ export function WorkflowTemplateGallery({ onClose, onSelectTemplate }: WorkflowT
                           handleTemplateSelect(template)
                         }}
                         className="flex items-center gap-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                        title="Use template in workflow builder"
                       >
                         <Play className="w-3 h-3" />
                         Use
                       </button>
+                      {onRunTemplate && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleTemplateRun(template)
+                          }}
+                          disabled={runningTemplate === template.template_id}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white rounded transition-colors"
+                          title="Run template directly"
+                        >
+                          {runningTemplate === template.template_id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Zap className="w-3 h-3" />
+                          )}
+                          {runningTemplate === template.template_id ? 'Running...' : 'Run'}
+                        </button>
+                      )}
                       {expandedTemplate === template.template_id ? (
                         <ChevronUp className="w-4 h-4 text-gray-400" />
                       ) : (
@@ -340,6 +374,28 @@ export function WorkflowTemplateGallery({ onClose, onSelectTemplate }: WorkflowT
             ))}
           </div>
         )}
+      </div>
+      
+      {/* Footer Navigation */}
+      <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex gap-2">
+          <button
+            onClick={() => window.location.href = '/workflows/templates'}
+            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+            title="Browse All Templates"
+          >
+            <GitBranch className="w-3 h-3" />
+            <span>All Templates</span>
+          </button>
+          <button
+            onClick={() => window.location.href = '/workflows/create'}
+            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
+            title="Create Custom Workflow"
+          >
+            <Zap className="w-3 h-3" />
+            <span>Create Custom</span>
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -1,17 +1,16 @@
 'use client'
 
 import { useRef, useEffect } from 'react'
-import { Send, Loader2, User, Sparkles, FileText, Plus, Copy, RefreshCw, Check, Microscope } from 'lucide-react'
-import { ActiveAgentsBar } from '@/components/chat/ActiveAgentsBar'
+import { Send, Loader2, User, Sparkles, FileText, Plus, Copy, RefreshCw, Check, Microscope, Bot } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { UnifiedChatInput } from '@/components/chat/UnifiedChatInput'
+import { DeepResearchStatus } from '@/components/ui/deep-research-status'
 import { SearchResult, Message } from './types'
 import { CharacterCounter } from './character-counter'
 import Image from 'next/image'
 import { MarkdownRenderer } from './markdown-renderer'
 import { StockChart } from './stock-chart'
-import { DeepResearchStatus } from '@/components/ui/deep-research-status'
 
 interface MessageData {
   sources: SearchResult[]
@@ -39,15 +38,11 @@ interface ChatInterfaceProps {
   followUpQuestions: string[]
   searchStatus: string
   isLoading: boolean
-  input: string
-  handleInputChange: (e: React.ChangeEvent<HTMLInputElement> | React.ChangeEvent<HTMLTextAreaElement>) => void
-  handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void
+  onSubmit: (query: string) => void
   messageData?: Map<number, MessageData>
   currentTicker?: string | null
   deepResearchStatus?: string | null
   researchProgress?: ResearchProgress | null
-  onDeepResearchToggle?: (enabled: boolean) => void
-  deepResearchEnabled?: boolean
   // Active agents bar props
   activeAgents?: any[]
   activeGroups?: any[]
@@ -67,15 +62,11 @@ export function ChatInterface({
   followUpQuestions, 
   searchStatus, 
   isLoading, 
-  input, 
-  handleInputChange, 
-  handleSubmit, 
+  onSubmit,
   messageData, 
   currentTicker, 
   deepResearchStatus, 
   researchProgress, 
-  onDeepResearchToggle, 
-  deepResearchEnabled,
   activeAgents = [],
   activeGroups = [],
   availableAgents = [],
@@ -88,7 +79,6 @@ export function ChatInterface({
   onModeSwitch
 }: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const formRef = useRef<HTMLFormElement>(null)
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
   
   // Simple theme detection based on document class - using state to avoid hydration mismatch
@@ -138,10 +128,8 @@ export function ChatInterface({
     }, 100)
   }, [messages, sources, followUpQuestions])
 
-  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (!input.trim() || isLoading) return
-    handleSubmit(e)
+  const handleFollowUpClick = (question: string) => {
+    onSubmit(question)
     
     // Scroll to bottom after submitting
     setTimeout(() => {
@@ -154,15 +142,6 @@ export function ChatInterface({
     }, 100)
   }
 
-  const handleFollowUpClick = (question: string) => {
-    // Set the input and immediately submit
-    handleInputChange({ target: { value: question } } as React.ChangeEvent<HTMLTextAreaElement>)
-    // Submit the form after a brief delay to ensure input is set
-    setTimeout(() => {
-      formRef.current?.requestSubmit()
-    }, 50)
-  }
-
   const handleCopy = (content: string, messageId: string) => {
     navigator.clipboard.writeText(content)
     setCopiedMessageId(messageId)
@@ -173,10 +152,16 @@ export function ChatInterface({
     // Get the last user message and resubmit it
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')
     if (lastUserMessage) {
-      handleInputChange({ target: { value: lastUserMessage.content } } as React.ChangeEvent<HTMLTextAreaElement>)
-      // Submit the form
+      onSubmit(lastUserMessage.content)
+      
+      // Scroll to bottom after submitting
       setTimeout(() => {
-        formRef.current?.requestSubmit()
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTo({
+            top: scrollContainerRef.current.scrollHeight,
+            behavior: 'smooth'
+          })
+        }
       }, 100)
     }
   }
@@ -184,21 +169,6 @@ export function ChatInterface({
 
   return (
     <div className="flex flex-col h-full relative" style={{ height: 'calc(100vh - 80px)' }}>
-      {/* Active Agents Bar */}
-      {(activeAgents.length > 0 || activeGroups.length > 0 || availableAgents.length > 0 || availableGroups.length > 0) && (
-        <ActiveAgentsBar
-          activeAgents={activeAgents}
-          activeGroups={activeGroups}
-          availableAgents={availableAgents}
-          availableGroups={availableGroups}
-          currentMode={currentMode}
-          onAddAgent={onAddAgent || (() => {})}
-          onRemoveAgent={onRemoveAgent || (() => {})}
-          onAddGroup={onAddGroup || (() => {})}
-          onRemoveGroup={onRemoveGroup || (() => {})}
-          onModeSwitch={onModeSwitch || (() => {})}
-        />
-      )}
       
       {/* Top gradient overlay */}
       <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-white to-transparent dark:from-zinc-900 dark:to-transparent pointer-events-none z-10" />
@@ -216,12 +186,6 @@ export function ChatInterface({
         }}
       >
         <div className="max-w-4xl mx-auto space-y-6 pb-8">
-          {/* Deep Research Status */}
-          <DeepResearchStatus 
-            status={deepResearchStatus || null} 
-            isActive={isLoading && !!deepResearchStatus} 
-            progress={researchProgress as any}
-          />
           
           {/* Previous conversations */}
           {messages.length > 2 && (
@@ -633,6 +597,13 @@ export function ChatInterface({
                   />
                 </div>
               </div>
+              
+              {/* Deep Research Progress - integrated in chat content */}
+              <DeepResearchStatus 
+                status={deepResearchStatus || null} 
+                isActive={isLoading && !!deepResearchStatus} 
+                progress={researchProgress as any}
+              />
             </div>
           )}
           
@@ -691,50 +662,20 @@ export function ChatInterface({
       {/* Fixed input at bottom */}
       <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white/95 dark:from-zinc-900 dark:via-zinc-900/95 to-transparent pt-6 pb-6 z-10">
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
-          <form onSubmit={handleFormSubmit} ref={formRef}>
-            <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-3 focus-within:border-gray-900 dark:focus-within:border-gray-100 transition-colors">
-              <div className="flex items-end gap-2">
-                <Textarea
-                  value={input}
-                  onChange={handleInputChange}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      formRef.current?.requestSubmit()
-                    }
-                  }}
-                  placeholder="Ask a follow-up question..."
-                  className="resize-none border-0 focus:ring-0 focus:outline-none bg-transparent placeholder:text-gray-400 dark:placeholder:text-gray-500 px-4 py-2 pr-2 shadow-none focus-visible:ring-0 focus-visible:border-0"
-                  rows={1}
-                  style={{
-                    minHeight: '36px',
-                    maxHeight: '100px',
-                    scrollbarWidth: 'thin',
-                    boxShadow: 'none'
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => onDeepResearchToggle?.(!deepResearchEnabled)}
-                  className={`bg-transparent hover:bg-gray-200 dark:hover:bg-zinc-700 text-gray-500 dark:text-gray-400 rounded-full h-8 w-8 min-h-[32px] min-w-[32px] flex items-center justify-center flex-shrink-0 transition-colors ${deepResearchEnabled ? 'text-purple-500' : ''}`}
-                  title={deepResearchEnabled ? 'Deep Research ON' : 'Deep Research OFF'}
-                >
-                  <Microscope className="h-4 w-4" />
-                </button>
-                <button
-                  type="submit"
-                  disabled={!input.trim() || isLoading}
-                  className="bg-orange-500 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-full h-8 w-8 min-h-[32px] min-w-[32px] flex items-center justify-center flex-shrink-0 transition-colors"
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-          </form>
+          <UnifiedChatInput 
+            onSubmit={onSubmit}
+            placeholder="Ask a follow-up question..."
+            disabled={isLoading}
+            className=""
+            activeAgents={activeAgents}
+            activeGroups={activeGroups}
+            availableAgents={availableAgents}
+            availableGroups={availableGroups}
+            onAddAgent={onAddAgent}
+            onRemoveAgent={onRemoveAgent}
+            onAddGroup={onAddGroup}
+            onRemoveGroup={onRemoveGroup}
+          />
         </div>
       </div>
     </div>
