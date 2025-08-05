@@ -46,3 +46,13 @@ next-env.d.ts
 # pnpm-lock.yaml
 # yarn.lock__pycache__/
 *.pyc
+
+# Exclude all markdown files in root except README.md
+/*.md
+!README.md
+
+# Project-specific folders to ignore
+/memory-bank/
+/logs/
+/prd/
+/video-processing-service/

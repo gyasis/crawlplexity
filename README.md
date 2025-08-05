@@ -1,22 +1,32 @@
 <div align="center">
 
-# 🔥 Fireplexity
+# 🔥 Crawlplexity
 
-**The Next-Generation AI-Powered Search Platform**
+**Enhanced AI-Powered Search Platform with Advanced Agent Orchestration**
 
-A comprehensive, self-hosted AI search engine that combines Google search with intelligent web scraping, multi-provider LLM responses, and advanced agent orchestration. Get accurate answers with real-time citations, workflow automation, and team collaboration - all under your control.
+A major fork and reconstruction of the original Crawlplexity search engine, now featuring comprehensive agent orchestration, team collaboration, workflow automation, and enterprise-grade management. This enhanced version combines the original's Google search and web scraping foundation with advanced SmallTalk AI agents, collaborative teams, and professional workflow management.
 
-![Fireplexity Overview](docs/visual-assets/screenshots/01-homepage-overview.png)
+![Crawlplexity Overview](docs/visual-assets/screenshots/01-homepage-overview.png)
 
-*Clean, intuitive interface with powerful AI search capabilities*
+*Clean, intuitive interface with powerful AI search capabilities and advanced agent orchestration*
 
 </div>
 
 ---
 
-## ✨ What Makes Fireplexity Different
+## ✨ What Makes This Enhanced Crawlplexity Different
 
-Fireplexity isn't just another search tool - it's a complete AI-powered research and automation platform that adapts to your needs:
+This isn't just the original Crawlplexity search tool - it's a major reconstruction featuring a complete AI-powered research and automation platform with advanced agent orchestration:
+
+### 🚀 **Major Enhancements Over Original Crawlplexity**
+- **🤖 SmallTalk Agent Integration** - Complete agent orchestration system with 4 specialized AI agents
+- **🤝 Team Collaboration** - Pre-built agent teams for complex collaborative workflows  
+- **⚡ Workflow Automation** - Visual workflow builder with template gallery
+- **⚙️ Enterprise Settings** - Multi-language support and comprehensive configuration
+- **🎛️ Advanced Parameter Control** - 32 configurable AI parameters across 8 categories
+- **📊 Team Analytics** - Performance monitoring and reporting dashboards
+
+*Built on the solid foundation of the original Crawlplexity's Google search and web scraping capabilities*
 
 ### 🔍 **Multi-Modal Search Experience**
 
@@ -43,7 +53,7 @@ Fireplexity isn't just another search tool - it's a complete AI-powered research
 
 </div>
 
-Fireplexity comes with a built-in SmallTalk agent ecosystem:
+This enhanced Crawlplexity comes with a built-in SmallTalk agent ecosystem:
 
 - **Research Assistant** - Specialized for thorough analysis and data gathering
 - **Coding Assistant** - Expert programming support and debugging
@@ -154,7 +164,7 @@ Professional configuration management:
 
 ## 🏗️ Architecture
 
-Fireplexity combines multiple services for optimal performance and scalability:
+Crawlplexity combines multiple services for optimal performance and scalability:
 
 ```
 User Query → Search Engine → Web Scraping → Agent Orchestration → AI Processing → Cached Results
@@ -203,8 +213,8 @@ Ready-to-use workflow templates:
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/mendableai/fireplexity.git
-cd fireplexity
+git clone https://github.com/mendableai/crawlplexity.git
+cd crawlplexity
 npm install
 ```
 
@@ -236,7 +246,7 @@ docker run -d -p 14782:4000 ghcr.io/berriai/litellm:main-latest
 docker run -d -p 29674:6379 redis:alpine
 ```
 
-### 4. Launch Fireplexity
+### 4. Launch Crawlplexity
 ```bash
 npm run dev
 ```
@@ -284,7 +294,7 @@ Visit **http://localhost:18563** and start exploring! 🎉
 - **Redis**: localhost:29674
 
 ### AI Parameters
-Fireplexity provides 32 configurable parameters across 8 categories:
+Crawlplexity provides 32 configurable parameters across 8 categories:
 - **Core Parameters** - Model selection and message configuration
 - **Generation Control** - Temperature, tokens, sampling parameters
 - **Output & Streaming** - Response format and streaming options
@@ -417,14 +427,14 @@ LITELLM_MODEL=mixtral-8x7b-32768   # Groq
 1. Install Ollama: https://ollama.ai
 2. Pull a model: `ollama pull llama3.1`
 3. Set `OLLAMA_BASE_URL=http://localhost:11434`
-4. Select "ollama" provider in Fireplexity
+4. Select "ollama" provider in Crawlplexity
 
 ---
 
 ## 🔧 Troubleshooting
 
 ### Service Health Checks
-Fireplexity includes built-in health monitoring:
+Crawlplexity includes built-in health monitoring:
 - **Crawl4AI**: `GET /health` endpoint monitoring
 - **LiteLLM**: Multi-provider availability checking  
 - **Redis**: Connection and performance testing
@@ -449,7 +459,7 @@ NODE_ENV=development
 
 ## 🤝 Contributing
 
-We welcome contributions! Here's how to get started:
+We welcome contributions to this enhanced Crawlplexity fork! Here's how to get started:
 
 1. **Fork the repository**
 2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
@@ -475,7 +485,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## 🙏 Acknowledgments
 
-Special thanks to these amazing projects that make Fireplexity possible:
+Special thanks to these amazing projects that make this enhanced Crawlplexity possible:
 
 - **[Crawl4AI](https://crawl4ai.com)** - Advanced web scraping with JavaScript support
 - **[Serper](https://serper.dev)** - Cost-effective Google search API
@@ -490,11 +500,11 @@ Special thanks to these amazing projects that make Fireplexity possible:
 
 <div align="center">
 
-**🔥 Fireplexity** - *The AI-Powered Search Platform You Control*
+**🔥 Crawlplexity** - *The Enhanced AI-Powered Search Platform You Control*
 
-[**🚀 Get Started**](#-quick-start) • [**📖 Documentation**](docs/) • [**🐛 Report Issues**](https://github.com/mendableai/fireplexity/issues) • [**💬 Discussions**](https://github.com/mendableai/fireplexity/discussions)
+[**🚀 Get Started**](#-quick-start) • [**📖 Documentation**](docs/) • [**🐛 Report Issues**](https://github.com/mendableai/crawlplexity/issues) • [**💬 Discussions**](https://github.com/mendableai/crawlplexity/discussions)
 
-[![GitHub Stars](https://img.shields.io/github/stars/mendableai/fireplexity?style=social)](https://github.com/mendableai/fireplexity)
+[![GitHub Stars](https://img.shields.io/github/stars/mendableai/crawlplexity?style=social)](https://github.com/mendableai/crawlplexity)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-000000?style=flat&logo=nextdotjs&logoColor=white)](https://nextjs.org/)
