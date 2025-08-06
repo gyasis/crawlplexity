@@ -147,7 +147,20 @@ export class CrawlplexityAgentService {
         currentSection = 'metadata';
       } else if (trimmed.includes(':') && currentSection) {
         const [key, ...valueParts] = trimmed.split(':');
-        const value = valueParts.join(':').trim().replace(/^["']|["']$/g, '');
+        let value = valueParts.join(':').trim().replace(/^["']|["']$/g, '');
+        
+        // Convert numeric strings to numbers for specific fields
+        if (['temperature', 'maxTokens', 'contextAwareness'].includes(key.trim())) {
+          const numValue = parseFloat(value);
+          if (!isNaN(numValue)) {
+            value = numValue as any;
+          }
+        }
+        
+        // Handle array-like fields that might be stored as single values
+        if (['expertise', 'taskTypes', 'tags'].includes(key.trim())) {
+          value = value ? [value] : [] as any;
+        }
         
         if (currentSection === 'config') {
           (manifest.config as any)[key.trim()] = value;
@@ -318,15 +331,41 @@ export class CrawlplexityAgentService {
     }
   }
 
-  async getAgentStatus(agentId: string): Promise<AgentStatus | null> {
+  async getAgentStatus(agentId: string): Promise<any | null> {
     const db = this.getDatabase();
     
     try {
       const agent = db.prepare(`
-        SELECT agent_id, name, description, status, agent_type, created_at, updated_at 
+        SELECT agent_id, name, description, status, agent_type, created_at, updated_at, manifest_path 
         FROM agents 
         WHERE agent_id = ?
       `).get(agentId);
+      
+      if (!agent) return null;
+
+      // Load the complete manifest data from the YAML file
+      if (agent.manifest_path && existsSync(agent.manifest_path)) {
+        try {
+          const yamlContent = readFileSync(agent.manifest_path, 'utf8');
+          const manifest = this.parseSimpleYaml(yamlContent);
+          
+          // Combine database info with manifest data
+          return {
+            agent_id: agent.agent_id,
+            name: agent.name,
+            description: agent.description,
+            status: agent.status,
+            agent_type: agent.agent_type,
+            created_at: agent.created_at,
+            updated_at: agent.updated_at,
+            config: manifest.config,
+            capabilities: manifest.capabilities,
+            metadata: manifest.metadata
+          };
+        } catch (error) {
+          console.error(`Failed to read manifest for agent ${agentId}:`, error);
+        }
+      }
       
       return agent as AgentStatus || null;
     } finally {
