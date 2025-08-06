@@ -56,3 +56,5 @@ next-env.d.ts
 /logs/
 /prd/
 /video-processing-service/
+/smalltalk_docs
+

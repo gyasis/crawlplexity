@@ -1,0 +1,15 @@
+
+> crawlplexity@1.1.0 dev
+> next dev --turbopack --port 18563
+
+ ⨯ Failed to start server
+Error: listen EADDRINUSE: address already in use :::18563
+    at <unknown> (Error: listen EADDRINUSE: address already in use :::18563)
+    at new Promise (<anonymous>) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '::',
+  port: 18563
+}
+[?25h
