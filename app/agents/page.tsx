@@ -158,23 +158,50 @@ export default function AgentsPage() {
   }
 
   const handleRunAgent = async (agentId: string) => {
+    const agent = agents.find(a => a.agent_id === agentId)
+    const agentName = agent?.name || agentId
+
     try {
+      // Show loading state immediately
+      alert(`Starting ${agentName}...`)
+      
       const response = await fetch(`/api/agents/${agentId}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          input: 'Test run',
+          input: 'Test run - checking agent functionality and responsiveness',
           sessionId: 'agent-test',
           userId: 'user'
         })
       })
       
-      if (response.ok) {
+      const data = await response.json()
+      
+      if (response.ok && data.success) {
+        // Success - show result
+        const result = data.data.result || 'Agent executed successfully'
+        const truncatedResult = result.length > 200 ? result.substring(0, 200) + '...' : result
+        
+        alert(`✅ ${agentName} completed successfully!\n\nResponse: ${truncatedResult}`)
+        
         // Refresh agents to show updated status
-        loadAgents()
+        await loadAgents()
+      } else {
+        // API returned error
+        const errorMsg = data.error || 'Unknown error occurred'
+        const details = data.details ? `\n\nDetails: ${data.details}` : ''
+        
+        alert(`❌ ${agentName} failed to run.\n\nError: ${errorMsg}${details}`)
+        
+        // Still refresh to show error status
+        await loadAgents()
       }
     } catch (error) {
       console.error('Failed to run agent:', error)
+      alert(`❌ Failed to run ${agentName}.\n\nNetwork or server error occurred. Please check the console for details.`)
+      
+      // Refresh agents in case status changed
+      await loadAgents()
     }
   }
 
@@ -187,10 +214,15 @@ export default function AgentsPage() {
       })
       
       if (response.ok) {
-        loadAgents()
+        await loadAgents() // Ensure agents list is refreshed
+        alert('Agent deleted successfully')
+      } else {
+        const errorData = await response.json()
+        alert(`Failed to delete agent: ${errorData.error || 'Unknown error'}`)
       }
     } catch (error) {
       console.error('Failed to delete agent:', error)
+      alert('Failed to delete agent. Please try again.')
     }
   }
 
@@ -376,8 +408,13 @@ export default function AgentsPage() {
                 <Edit className="w-3 h-3" />
               </Button>
             </Link>
-            <Button size="sm" variant="outline" className="text-xs">
-              <MoreVertical className="w-3 h-3" />
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="text-xs"
+              onClick={() => handleDeleteAgent(agent.agent_id)}
+            >
+              <Trash2 className="w-3 h-3" />
             </Button>
           </div>
         </div>
