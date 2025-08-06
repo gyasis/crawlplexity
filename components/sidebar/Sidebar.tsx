@@ -14,7 +14,9 @@ import {
   ChevronDown,
   GitBranch,
   Plus,
-  ChevronsUpDown
+  ChevronsUpDown,
+  Wrench,
+  Server
 } from 'lucide-react'
 import { ModelSelector } from './ModelSelector'
 import { EnhancedParameterControls } from './EnhancedParameterControls'
@@ -221,12 +223,28 @@ export function Sidebar() {
                     <span>Agents</span>
                   </button>
                   <button
-                    onClick={() => window.location.href = '/teams'}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors"
-                    title="Team Management"
+                    onClick={() => window.location.href = '/tools'}
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded transition-colors"
+                    title="Tool Library & Management"
                   >
-                    <Bot className="w-3 h-3" />
-                    <span>Teams</span>
+                    <Wrench className="w-3 h-3" />
+                    <span>Tools</span>
+                  </button>
+                  <button
+                    onClick={() => window.location.href = '/mcp-servers'}
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-cyan-600 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 rounded transition-colors"
+                    title="MCP Server Dashboard"
+                  >
+                    <Server className="w-3 h-3" />
+                    <span>MCP Servers</span>
+                  </button>
+                  <button
+                    onClick={() => window.location.href = '/agent-config'}
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors"
+                    title="Agent Configuration Panel"
+                  >
+                    <Settings className="w-3 h-3" />
+                    <span>Agent Config</span>
                   </button>
                   <button
                     onClick={() => window.location.href = '/settings'}
