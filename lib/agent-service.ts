@@ -476,6 +476,9 @@ export class CrawlplexityAgentService {
       // Add to local agents map
       this.agents.set(agentId, manifest);
       
+      // Trigger SmallTalk reload for the new agent
+      await this.reloadSmallTalkAgent(agentId);
+      
       return agentId;
     } catch (error) {
       console.error('[AgentService] Failed to create agent:', error);
@@ -523,6 +526,9 @@ export class CrawlplexityAgentService {
       if (existsSync(manifestPath)) {
         require('fs').unlinkSync(manifestPath);
       }
+      
+      // Trigger SmallTalk full reload to remove the agent
+      await this.reloadAllSmallTalkAgents();
     } catch (error) {
       console.error('[AgentService] Failed to delete agent:', error);
       throw error;
@@ -809,6 +815,47 @@ export class CrawlplexityAgentService {
     } catch (error) {
       db.close();
       throw error;
+    }
+  }
+
+  private async reloadSmallTalkAgent(agentId: string): Promise<void> {
+    try {
+      const response = await fetch('http://localhost:18563/api/smalltalk/reload-agent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log(`[AgentService] ✅ SmallTalk agent ${agentId} reloaded successfully`);
+      } else {
+        console.warn(`[AgentService] ⚠️  Failed to reload SmallTalk agent ${agentId}: ${data.error}`);
+      }
+    } catch (error) {
+      console.warn(`[AgentService] ⚠️  Could not reload SmallTalk agent ${agentId}:`, error);
+      // Don't throw - SmallTalk reload is optional
+    }
+  }
+
+  private async reloadAllSmallTalkAgents(): Promise<void> {
+    try {
+      const response = await fetch('http://localhost:18563/api/smalltalk/reload-agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log(`[AgentService] ✅ All SmallTalk agents reloaded successfully: ${data.data.registeredCount} agents`);
+      } else {
+        console.warn(`[AgentService] ⚠️  Failed to reload all SmallTalk agents: ${data.error}`);
+      }
+    } catch (error) {
+      console.warn(`[AgentService] ⚠️  Could not reload SmallTalk agents:`, error);
+      // Don't throw - SmallTalk reload is optional
     }
   }
 

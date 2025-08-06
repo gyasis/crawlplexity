@@ -27,7 +27,41 @@ export async function GET() {
 // POST /api/agents - Create new agent
 export async function POST(request: NextRequest) {
   try {
-    const manifest = await request.json();
+    const requestData = await request.json();
+    
+    // Transform frontend data structure to AgentManifest format
+    let manifest;
+    
+    if (requestData.config?.name) {
+      // Already in correct format
+      manifest = requestData;
+    } else if (requestData.name) {
+      // Transform from frontend format to AgentManifest format
+      manifest = {
+        config: {
+          name: requestData.name,
+          model: requestData.config?.model,
+          personality: requestData.config?.personality,
+          temperature: requestData.config?.temperature,
+          maxTokens: requestData.config?.maxTokens,
+          tools: requestData.config?.tools
+        },
+        capabilities: requestData.capabilities || {},
+        metadata: {
+          ...requestData.metadata,
+          description: requestData.description || requestData.metadata?.description,
+          author: requestData.metadata?.author
+        }
+      };
+    } else {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'Invalid request: agent name is required' 
+        },
+        { status: 400 }
+      );
+    }
     
     // Validate manifest structure
     if (!manifest.config?.name) {

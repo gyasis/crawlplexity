@@ -1,0 +1,17 @@
+config:
+  name: "Filesystem Explorer Agent"
+  model: "gpt-4o-mini"
+  temperature: 0.7
+  maxTokens: 2048
+
+capabilities:
+  expertise: ""
+  taskTypes: ""
+  complexity: "intermediate"
+  contextAwareness: "5"
+
+metadata:
+  version: "1.0.0"
+  author: ""
+  tags: ""
+  description: "undefined"

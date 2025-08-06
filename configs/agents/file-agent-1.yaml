@@ -1,0 +1,18 @@
+config:
+  name: "File Agent 1"
+  model: "gpt-4o-mini"
+  personality: "Straight and too the point, doesnt mince words"
+  temperature: 0.7
+  maxTokens: 16000
+
+capabilities:
+  expertise: "teminal commands"
+  taskTypes: "Directory Navigator"
+  complexity: "intermediate"
+  contextAwareness: "7"
+
+metadata:
+  version: "1.0.0"
+  author: "Gyasi Sutton"
+  tags: "FileSystem"
+  description: "This agent has tools available to look through any directory and do tasks that require directory access "

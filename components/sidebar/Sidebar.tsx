@@ -203,56 +203,56 @@ export function Sidebar() {
           )}
             
             {/* Quick Navigation Links - Only show in expanded mode */}
-            {!isWorkflowBuilder && !isTemplateGallery && (
+            {!isWorkflowBuilder && !isTemplateGallery && isExpanded && (
               <div className="px-4 pb-3">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
                   <button
                     onClick={() => window.location.href = '/workflows'}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors"
                     title="Full Workflow Management"
                   >
-                    <GitBranch className="w-3 h-3" />
-                    <span>Workflows</span>
+                    <GitBranch className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">Workflows</span>
                   </button>
                   <button
                     onClick={() => window.location.href = '/agents'}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-colors"
                     title="Full Agent Management"
                   >
-                    <Bot className="w-3 h-3" />
-                    <span>Agents</span>
+                    <Bot className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">Agents</span>
                   </button>
                   <button
                     onClick={() => window.location.href = '/tools'}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-md transition-colors"
                     title="Tool Library & Management"
                   >
-                    <Wrench className="w-3 h-3" />
-                    <span>Tools</span>
+                    <Wrench className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">Tools</span>
                   </button>
                   <button
                     onClick={() => window.location.href = '/mcp-servers'}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-cyan-600 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 rounded transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-cyan-600 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-900/20 rounded-md transition-colors"
                     title="MCP Server Dashboard"
                   >
-                    <Server className="w-3 h-3" />
-                    <span>MCP Servers</span>
+                    <Server className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">MCP Servers</span>
                   </button>
                   <button
                     onClick={() => window.location.href = '/agent-config'}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-md transition-colors"
                     title="Agent Configuration Panel"
                   >
-                    <Settings className="w-3 h-3" />
-                    <span>Agent Config</span>
+                    <Settings className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">Agent Config</span>
                   </button>
                   <button
                     onClick={() => window.location.href = '/settings'}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900/20 rounded transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900/20 rounded-md transition-colors"
                     title="Settings"
                   >
-                    <Settings className="w-3 h-3" />
-                    <span>Settings</span>
+                    <Settings className="w-4 h-4 flex-shrink-0" />
+                    <span className="truncate">Settings</span>
                   </button>
                 </div>
               </div>

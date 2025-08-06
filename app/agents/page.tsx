@@ -85,11 +85,51 @@ export default function AgentsPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'teams'>('grid')
   const [selectedAgents, setSelectedAgents] = useState<Set<string>>(new Set())
+  const [smallTalkStatus, setSmallTalkStatus] = useState<{
+    isActive: boolean
+    availableAgents: string[]
+    totalAgents: number
+  } | null>(null)
+  const [showDebug, setShowDebug] = useState(false)
 
   useEffect(() => {
     loadAgents()
     loadTeams()
+    loadSmallTalkStatus()
   }, [])
+
+  const loadSmallTalkStatus = async () => {
+    try {
+      const response = await fetch('/api/smalltalk/reload-agents')
+      if (response.ok) {
+        const data = await response.json()
+        setSmallTalkStatus(data.data)
+      }
+    } catch (error) {
+      console.error('Failed to load SmallTalk status:', error)
+    }
+  }
+
+  const handleReloadAllAgents = async () => {
+    try {
+      const response = await fetch('/api/smalltalk/reload-agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        alert(`✅ Successfully reloaded ${data.data.registeredCount} agents in SmallTalk`)
+        await loadSmallTalkStatus()
+      } else {
+        alert(`❌ Failed to reload agents: ${data.error}`)
+      }
+    } catch (error) {
+      console.error('Failed to reload agents:', error)
+      alert('❌ Failed to reload agents. Check console for details.')
+    }
+  }
 
   const loadAgents = async () => {
     try {
@@ -563,6 +603,15 @@ export default function AgentsPage() {
                   Create Agent
                 </Button>
               </Link>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowDebug(!showDebug)}
+                className="flex items-center gap-2"
+              >
+                <Settings className="w-4 h-4" />
+                Debug
+              </Button>
               <Link href="/">
                 <Button variant="outline" className="flex items-center gap-2">
                   <ArrowLeft className="w-4 h-4" />
@@ -573,6 +622,64 @@ export default function AgentsPage() {
           </div>
         </div>
       </div>
+
+      {/* Debug Panel */}
+      {showDebug && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                  🔧 Agent Sync Debug Panel
+                </h3>
+                <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium text-yellow-700 dark:text-yellow-300">
+                      Database Agents:
+                    </span>
+                    <span className="ml-2 text-yellow-600 dark:text-yellow-400">
+                      {agents.length} ({agents.map(a => a.agent_id).join(', ')})
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-yellow-700 dark:text-yellow-300">
+                      SmallTalk Status:
+                    </span>
+                    <span className="ml-2 text-yellow-600 dark:text-yellow-400">
+                      {smallTalkStatus?.isActive ? '✅ Active' : '❌ Inactive'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-yellow-700 dark:text-yellow-300">
+                      SmallTalk Agents:
+                    </span>
+                    <span className="ml-2 text-yellow-600 dark:text-yellow-400">
+                      {smallTalkStatus?.totalAgents || 0} ({smallTalkStatus?.availableAgents.join(', ') || 'None'})
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={loadSmallTalkStatus}
+                  className="text-yellow-700 border-yellow-300 hover:bg-yellow-100"
+                >
+                  Refresh
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={handleReloadAllAgents}
+                  className="bg-yellow-600 hover:bg-yellow-700 text-white"
+                >
+                  Sync All to SmallTalk
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {viewMode !== 'teams' && (
