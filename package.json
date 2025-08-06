@@ -8,7 +8,13 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
-    "test:smalltalk": "node tests/integration/test-smalltalk-integration.js"
+    "test:smalltalk": "node tests/integration/test-smalltalk-integration.js",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:tools": "playwright test tests/e2e/tools-integration.spec.ts",
+    "test:mcp": "playwright test tests/e2e/mcp-servers.spec.ts",
+    "test:workflow": "playwright test tests/e2e/integration-workflow.spec.ts"
   },
   "dependencies": {
     "@deepkit/type": "^1.0.15",
