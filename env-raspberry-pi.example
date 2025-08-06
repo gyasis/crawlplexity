@@ -1,0 +1,79 @@
+# N8n Raspberry Pi Environment Configuration
+# Copy this file to .env and customize the values
+
+# ======================
+# N8N AUTHENTICATION
+# ======================
+N8N_USER=admin
+N8N_PASSWORD=your_very_secure_password_here
+
+# ======================
+# DATABASE SETTINGS
+# ======================
+POSTGRES_DB=n8n
+POSTGRES_USER=n8n_user
+POSTGRES_PASSWORD=your_database_password_here
+POSTGRES_NON_ROOT_USER=n8n_user
+POSTGRES_NON_ROOT_PASSWORD=your_database_password_here
+
+# ======================
+# NETWORK SETTINGS
+# ======================
+# Replace with your Raspberry Pi's IP address
+# Find it with: hostname -I
+RPI_IP=192.168.1.100
+
+# ======================
+# TIMEZONE SETTINGS
+# ======================
+# Your timezone (find yours at: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
+TIMEZONE=America/New_York
+
+# ======================
+# RASPBERRY PI OPTIMIZATIONS
+# ======================
+# Memory limits (adjust based on your Pi model)
+# Pi 4 (8GB): Use these defaults
+# Pi 4 (4GB): Reduce NODE_MAX_MEMORY to 512
+NODE_MAX_MEMORY=1024
+
+# Execution timeouts (in seconds)
+WORKFLOW_TIMEOUT=300
+MAX_WORKFLOW_TIMEOUT=600
+
+# ======================
+# OPTIONAL SETTINGS
+# ======================
+# Uncomment and modify as needed
+
+# Custom webhook URL (for external access)
+# WEBHOOK_URL=https://your-domain.duckdns.org:5678/
+
+# Email settings (for notifications)
+# N8N_EMAIL_MODE=smtp
+# N8N_SMTP_HOST=smtp.gmail.com
+# N8N_SMTP_PORT=587
+# N8N_SMTP_USER=your-email@gmail.com
+# N8N_SMTP_PASS=your-app-password
+# N8N_SMTP_SENDER=your-email@gmail.com
+
+# Slack notifications (for system alerts)
+# SLACK_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK
+
+# ======================
+# ADVANCED SETTINGS
+# ======================
+# Only modify if you know what you're doing
+
+# Log level (error, warn, info, verbose, debug)
+LOG_LEVEL=info
+
+# Enable metrics endpoint
+ENABLE_METRICS=true
+
+# Maximum payload size (MB) - reduced for Pi
+MAX_PAYLOAD_SIZE=8
+
+# Queue settings
+QUEUE_BULL_PREFIX=n8n_bull
+QUEUE_HEALTH_CHECK_ACTIVE=true
